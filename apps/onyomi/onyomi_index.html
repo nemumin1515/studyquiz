@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>音読みクイズ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=BIZ+UDPMincho&display=swap" rel="stylesheet">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="../../core/ui/common.css">
+<link rel="stylesheet" href="./onyomi.css">
+<script>
+const APP_CONFIG = {
+  appId    : 'onyomi_app',
+  appTitle : '音読みクイズ'
+};
+</script>
+<script src="../../core/ui/tabs.js"></script>
+<script src="../../core/strage/points.js"></script>
+<script src="../../core/strage/records.js"></script>
+</head>
+<body>
+
+<!-- タブバー -->
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="AppCore.tabs.switchMain('quiz',this)">クイズ</button>
+  <button class="tab-btn" onclick="AppCore.tabs.switchMain('record',this)">記録</button>
+  <button class="tab-btn" onclick="AppCore.tabs.switchMain('settings',this)">設定</button>
+</div>
+
+<!-- クイズページ -->
+<div id="page-quiz" class="page active">
+  <div class="header">
+    <div>
+      <div class="title">音読みクイズ</div>
+      <div style="font-size:11px;color:#bbb;margin-top:1px" id="point-rank-disp"></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="font-size:11px;color:#888" id="header-rank-disp"></div>
+      <div class="point-disp"><span class="point-star">⭐</span><span id="point-disp">0 pt</span></div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+        <div style="font-size:11px;color:#bbb" id="session-disp"></div>
+        <div class="score" id="score-disp">0 / 10 問</div>
+      </div>
+    </div>
+  </div>
+  <div class="progress-bar"><div class="progress-fill" id="prog" style="width:0%"></div></div>
+  <div id="quiz-area"></div>
+  <div id="weak-area"></div>
+</div>
+
+<!-- 記録ページ -->
+<div class="page" id="page-record">
+  <div class="rec-header">
+    <span class="rec-title">学習記録</span>
+  </div>
+  <div class="sub-tab-bar">
+    <button class="sub-tab active" onclick="AppCore.tabs.switchSub('list',this)">一覧</button>
+    <button class="sub-tab" onclick="AppCore.tabs.switchSub('delete',this)">記録を削除</button>
+  </div>
+
+  <!-- 一覧タブ -->
+  <div id="sub-list">
+    <div class="print-filter-row">
+      <label class="print-filter-label">以降の記録を表示</label>
+      <input type="date" id="print-date-from" class="print-date-input" onchange="renderPrintPreview()">
+      <button class="print-clear-btn" onclick="clearDateFilter()">クリア</button>
+    </div>
+    <div class="print-btn-row">
+      <button class="print-trigger-btn" onclick="printRecords()">🖨 印刷する</button>
+    </div>
+    <div class="print-area" id="print-area"></div>
+  </div>
+
+  <!-- 記録を削除タブ -->
+  <div id="sub-delete" style="display:none">
+    <div class="delete-confirm-card">
+      <div class="delete-confirm-icon">⚠️</div>
+      <div class="delete-confirm-title">学習記録をすべて削除します</div>
+      <div class="delete-confirm-note">この操作は元に戻せません。</div>
+      <div class="delete-confirm-btns">
+        <button class="delete-exec-btn" onclick="execClearRecords()">削除する</button>
+        <button class="delete-cancel-btn" onclick="cancelDelete()">キャンセル</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 設定ページ -->
+<div id="page-settings" class="page">
+  <div id="settings-area"></div>
+</div>
+
+<script>
+(function(){
+// データは namuminKanji2022.json から読み込む
+const STORAGE_FOCUS = 'onyomi_focus_kanji';
+// STORAGE_POINTS → points.js (AppCore.points) に移行済み
+// STORAGE_RECORDS → records.js (AppCore.records) に移行済み
+
+// ---- タブ切替 ----
+// switchTab → AppCore.tabs.switchMain に移行済み
+AppCore.tabs.onSwitch('record',   () => renderPrintPreview());
+AppCore.tabs.onSwitch('settings', () => renderSettingsPage());
+// 後方互換（他箇所からの switchTab() 呼び出し用）
+function switchTab(tab) { AppCore.tabs.switchMain(tab, null); }
+window.switchTab = switchTab;
+
+// ---- データ読み込み ----
+// 新JSON形式: { "よみ": [{k, g}, ...], ... } に対応
+let db = null, idx = null;
+function loadChunk(resolve) {
+  const RAW = globalThis._RAW;
+  db = []; idx = {};
+  const kanjMap = {}; // 漢字文字 → db内インデックス の一時マップ
+  for (const reading of Object.keys(RAW)) {
+    if (!idx[reading]) idx[reading] = [];
+    for (const item of RAW[reading]) {
+      const k = item.k;
+      if (kanjMap[k] === undefined) {
+        db.push({ k: k, r: [reading], g: item.g });
+        kanjMap[k] = db.length - 1;
+      } else {
+        // 同じ漢字が複数の読みに登場する場合、読みを追記
+        if (!db[kanjMap[k]].r.includes(reading)) {
+          db[kanjMap[k]].r.push(reading);
+        }
+      }
+      idx[reading].push(kanjMap[k]);
+    }
+  }
+  resolve();
+}
+
+// ---- 永続データ ----
+function loadFocusFromStorage() {
+  try { const r=localStorage.getItem(STORAGE_FOCUS); return r?JSON.parse(r):[]; } catch(e){return[];}
+}
+function saveFocusToStorage(arr) {
+  try { localStorage.setItem(STORAGE_FOCUS, JSON.stringify(arr)); } catch(e){}
+}
+// loadRecords / saveRecords → records.js のグローバル後方互換関数を使用
+
+// ---- 状態 ----
+let selectedGrades = new Set();
+let focusKanji = loadFocusFromStorage();
+let focusRatio = 'all'; // 重点漢字の出題割合: 'all' | 'half' | 'none'
+
+let targetCount = 10;
+
+// ---- ポイント・レベル ----
+// LEVELS → LEVELS に移行済み
+// getRank → AppCore.points に移行済み
+// getNextRank → AppCore.points に移行済み
+// loadPoints → AppCore.points に移行済み
+// savePoints → AppCore.points に移行済み
+let totalPoints = loadPoints();
+let weakMap = {}, score = 0, total = 0;
+let sessionCount = 0;
+let currentQ = null, selected = new Set(), answered = false;
+let quizActive = false;
+let questionQueue = [];
+
+// セッション内の正解した音読みを記録
+let correctReadings = new Set();
+// セッション内の出題音読み・間違えた漢字を記録
+let wordsPlayed = [];
+let wrongKanji  = [];
+
+function rand(n){return Math.floor(Math.random()*n);}
+function shuffle(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=rand(i+1);[b[i],b[j]]=[b[j],b[i]];}return b;}
+
+function getFilteredDb(){
+  if(selectedGrades.size===0) return db.filter(e=>e.r.length>0);
+  return db.filter(e=>e.r.length>0&&selectedGrades.has(e.g));
+}
+function countByGrade(g){
+  if(!db) return 0;
+  if(g===0) return db.filter(e=>e.r.length>0).length;
+  return db.filter(e=>e.r.length>0&&e.g===g).length;
+}
+
+// ---- 問題生成 ----
+// ---- 問題生成 ----
+const PANEL_SIZE = 6;
+
+function uniqueIdxs(idxs){
+  const seen = new Set();
+  const out = [];
+  for(const i of idxs){
+    if(i === undefined || i < 0) continue;
+    const k = db[i].k;
+    if(seen.has(k)) continue;
+    seen.add(k);
+    out.push(i);
+  }
+  return out;
+}
+
+function getMaxSameReadingPerSession(n){
+  // 「20%以上を同じ読みにしない」ため、10問なら最大2問。
+  // 5問以下でも重点漢字を出せるよう、最低1問は許可する。
+  return Math.max(1, Math.floor(n * 0.2));
+}
+
+function addReadingUse(map, reading){
+  map[reading] = (map[reading] || 0) + 1;
+}
+
+function canUseReading(map, reading){
+  return (map[reading] || 0) < getMaxSameReadingPerSession(targetCount);
+}
+
+function buildPoolReadingIdx(pool){
+  const poolReadingIdx = {};
+  for(const i of pool){
+    for(const r of db[i].r){
+      if(!poolReadingIdx[r]) poolReadingIdx[r] = [];
+      poolReadingIdx[r].push(i);
+    }
+  }
+  for(const r of Object.keys(poolReadingIdx)){
+    poolReadingIdx[r] = uniqueIdxs(poolReadingIdx[r]);
+  }
+  return poolReadingIdx;
+}
+
+function buildNormalQuestion(pool, readingUse = {}){
+  // 通常問題：出題範囲内で同じ読みの漢字をすべて正解に含める。
+  const poolReadingIdx = buildPoolReadingIdx(pool);
+
+  // 正解が1個だけの読みは通常問題では出さない。
+  const validReadings = shuffle(Object.keys(poolReadingIdx).filter(r =>
+    poolReadingIdx[r].length >= 2 && canUseReading(readingUse, r)
+  ));
+
+  for(const reading of validReadings){
+    const correctPool = poolReadingIdx[reading];
+
+    // 正解が6個を超える場合は、表示できる6個だけランダムに選ぶ。
+    const chosenCorrect = correctPool.length > PANEL_SIZE
+      ? shuffle(correctPool).slice(0, PANEL_SIZE)
+      : [...correctPool];
+
+    // 正解が6個未満なら、残りを「その読みを持たない漢字」で埋める。
+    const wrongNeeded = PANEL_SIZE - chosenCorrect.length;
+    const correctKeys = new Set(chosenCorrect.map(i => db[i].k));
+    const wrongPool = pool.filter(i =>
+      !correctKeys.has(db[i].k) && !db[i].r.includes(reading)
+    );
+
+    if(wrongPool.length < wrongNeeded) continue;
+
+    const chosenWrong = shuffle(wrongPool).slice(0, wrongNeeded);
+    const choices = shuffle([...chosenCorrect, ...chosenWrong]).map(i => db[i]);
+    const correctSet = new Set(chosenCorrect.map(i => db[i].k));
+
+    return { reading, correctSet, choices: choices.map(e => e.k) };
+  }
+  return null;
+}
+
+function buildFocusQuestion(focusK, pool){
+  // 関数名は変更しない。
+  // 文字1つでも、{reading, focusIdxs} のグループ形式でも受け取れるようにする。
+  let reading;
+  let focusIdxs;
+
+  if(typeof focusK === 'object' && focusK !== null && focusK.reading && Array.isArray(focusK.focusIdxs)){
+    reading = focusK.reading;
+    focusIdxs = uniqueIdxs(focusK.focusIdxs).filter(i => db[i].r.includes(reading));
+  }else{
+    const entryIdx = db.findIndex(e => e.k === focusK);
+    if(entryIdx < 0 || !db[entryIdx].r.length) return null;
+
+    const filteredReadings = new Set(pool.flatMap(i => db[i].r));
+    const preferredR = db[entryIdx].r.filter(r => filteredReadings.has(r));
+    const candidateR = preferredR.length > 0 ? preferredR : db[entryIdx].r;
+
+    reading = candidateR[rand(candidateR.length)];
+    focusIdxs = [entryIdx];
+  }
+
+  if(!reading || !focusIdxs.length) return null;
+
+  // 重点漢字を最優先でパネルに入れる。
+  const chosenFocus = focusIdxs.slice(0, PANEL_SIZE);
+  const focusKeys = new Set(chosenFocus.map(i => db[i].k));
+
+  // 出題範囲内の同じ読みを追加。ただし重点漢字を優先し、残り枠だけ採用。
+  const sameReadingPool = pool.filter(i =>
+    !focusKeys.has(db[i].k) && db[i].r.includes(reading)
+  );
+  const sameSlots = shuffle(sameReadingPool).slice(0, PANEL_SIZE - chosenFocus.length);
+
+  const usedKeys = new Set([...focusKeys, ...sameSlots.map(i => db[i].k)]);
+
+  // 残りは不正解、つまり「この読みを持たない漢字」で埋める。
+  const wrongNeeded = PANEL_SIZE - chosenFocus.length - sameSlots.length;
+  const wrongPool = pool.filter(i =>
+    !usedKeys.has(db[i].k) && !db[i].r.includes(reading)
+  );
+
+  if(wrongPool.length < wrongNeeded) return null;
+
+  const wrongSlots = shuffle(wrongPool).slice(0, wrongNeeded);
+  const choices = shuffle([...chosenFocus, ...sameSlots, ...wrongSlots]).map(i => db[i]);
+
+  // 表示されたパネルの中で、指定の読みを持つ漢字を正解にする。
+  const correctSet = new Set(
+    choices.filter(e => e.r.includes(reading)).map(e => e.k)
+  );
+
+  return { reading, correctSet, choices: choices.map(e => e.k) };
+}
+
+function buildFocusGroups(pool, maxFocusQuestions){
+  if(maxFocusQuestions <= 0) return [];
+
+  const focusIdxs = uniqueIdxs(
+    focusKanji.map(k => db.findIndex(e => e.k === k && e.r.length > 0))
+  );
+  if(!focusIdxs.length) return [];
+
+  const poolReadings = new Set(pool.flatMap(i => db[i].r));
+  const byReading = {};
+
+  for(const idx of focusIdxs){
+    for(const r of db[idx].r){
+      if(!byReading[r]) byReading[r] = [];
+      byReading[r].push(idx);
+    }
+  }
+
+  for(const r of Object.keys(byReading)){
+    byReading[r] = uniqueIdxs(byReading[r]);
+  }
+
+  const groups = [];
+  const usedFocus = new Set();
+  const readingUse = {};
+  const maxSameReading = getMaxSameReadingPerSession(targetCount);
+
+  // 同じ読みの重点漢字をできるだけ1問にまとめる。
+  // 例：コウの重点漢字が10個なら、6個 + 4個の2問に分ける。
+  while(groups.length < maxFocusQuestions && usedFocus.size < focusIdxs.length){
+    let best = null;
+
+    for(const reading of Object.keys(byReading)){
+      const remaining = byReading[reading].filter(i => !usedFocus.has(i));
+      if(!remaining.length) continue;
+
+      const slotsLeftForReading = maxSameReading - (readingUse[reading] || 0);
+      if(slotsLeftForReading <= 0) continue;
+
+      // まだ未使用の重点漢字を最も多く含む読みを優先する。
+      const score = remaining.length * 100 + (poolReadings.has(reading) ? 1 : 0);
+      if(!best || score > best.score){
+        best = { reading, focusIdxs: remaining, slotsLeftForReading, score };
+      }
+    }
+
+    if(!best) break;
+
+    const shuffledFocus = shuffle(best.focusIdxs);
+    const chunksAllowed = Math.min(
+      best.slotsLeftForReading,
+      maxFocusQuestions - groups.length,
+      Math.ceil(shuffledFocus.length / PANEL_SIZE)
+    );
+
+    for(let c = 0; c < chunksAllowed; c++){
+      const chunk = shuffledFocus.slice(c * PANEL_SIZE, (c + 1) * PANEL_SIZE);
+      if(!chunk.length) continue;
+
+      groups.push({ reading: best.reading, focusIdxs: chunk });
+      addReadingUse(readingUse, best.reading);
+      for(const idx of chunk) usedFocus.add(idx);
+    }
+  }
+
+  return shuffle(groups);
+}
+
+function readingCountMap(queue){
+  const m = {};
+  for(const q of queue){
+    if(!q || !q.reading) continue;
+    m[q.reading] = (m[q.reading] || 0) + 1;
+  }
+  return m;
+}
+
+function hardLimitQueueByReading(queue, pool){
+  // 最終安全装置：どの経路で作られた問題でも、同じ読みが20%を超えないようにする。
+  const maxSameReading = getMaxSameReadingPerSession(targetCount);
+  const readingUse = {};
+  const out = new Array(queue.length).fill(null);
+
+  for(let i = 0; i < queue.length; i++){
+    const q = queue[i];
+    if(!q || !q.reading || !q.choices || q.choices.length !== PANEL_SIZE) continue;
+    if((readingUse[q.reading] || 0) >= maxSameReading) continue;
+    out[i] = q;
+    addReadingUse(readingUse, q.reading);
+  }
+
+  for(let i = 0; i < out.length; i++){
+    if(out[i]) continue;
+    const q = buildNormalQuestion(pool, readingUse);
+    if(q && q.choices && q.choices.length === PANEL_SIZE){
+      out[i] = q;
+      addReadingUse(readingUse, q.reading);
+    }
+  }
+
+  // 開発確認用。ブラウザのF12→Consoleで出題読みの内訳を確認できる。
+  console.log('reading counts', readingCountMap(out));
+  return out;
+}
+
+function buildQuestionQueue(){
+  const fdb = getFilteredDb();
+  const pool = fdb.map(e => db.findIndex(d => d.k === e.k));
+  if(pool.length < PANEL_SIZE) return [];
+
+  const n = targetCount;
+  const queue = new Array(n).fill(null);
+  const readingUse = {};
+
+  const maxFocus = focusRatio === 'none'
+    ? 0
+    : focusRatio === 'half'
+      ? Math.floor(n / 2)
+      : n;
+
+  const focusGroups = buildFocusGroups(pool, maxFocus);
+  const slots = shuffle([...Array(n).keys()]);
+  let slotPos = 0;
+
+  // 重点漢字問題を先に配置する。
+  for(const group of focusGroups){
+    if(slotPos >= slots.length) break;
+    if(!canUseReading(readingUse, group.reading)) continue;
+
+    const q = buildFocusQuestion(group, pool);
+    if(!q || !q.choices || q.choices.length !== PANEL_SIZE) continue;
+
+    queue[slots[slotPos]] = q;
+    slotPos++;
+    addReadingUse(readingUse, q.reading);
+  }
+
+  // 残りを通常問題で埋める。通常問題も同じ読みが20%を超えないようにする。
+  for(let i = 0; i < n; i++){
+    if(queue[i]) continue;
+
+    const q = buildNormalQuestion(pool, readingUse);
+    if(q && q.choices && q.choices.length === PANEL_SIZE){
+      queue[i] = q;
+      addReadingUse(readingUse, q.reading);
+    }
+  }
+
+  return hardLimitQueueByReading(queue, pool);
+}
+
+// ---- スコア表示 ----
+function updateScoreDisplay(){
+  const sd=document.getElementById('score-disp');
+  if(sd) sd.textContent=`${total} / ${targetCount} 問`;
+  const pg=document.getElementById('prog');
+  if(pg) pg.style.width=Math.round((total/targetCount)*100)+'%';
+  const sc=document.getElementById('session-disp');
+  if(sc) sc.textContent=sessionCount>0?`${sessionCount}回目`:'';
+  const pd=document.getElementById('point-disp');
+  if(pd) pd.textContent=`${totalPoints} pt`;
+  const hr=document.getElementById('header-rank-disp');
+  if(hr) hr.textContent=getRank(totalPoints).label;
+}
+
+// ---- 記録保存 ----
+function saveRecord(){
+  const now=new Date();
+  const dateStr=`${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  const pct=Math.round(score/targetCount*100);
+  const weakEntries=Object.entries(weakMap)
+    .filter(([,v])=>v.missed>0||v.extra>0)
+    .sort((a,b)=>(b[1].missed+b[1].extra)-(a[1].missed+a[1].extra))
+    .map(([k,v])=>({k,missed:v.missed,extra:v.extra}));
+  // セッション中に出題された重点漢字を記録
+  const usedFocus = focusKanji.filter(k => questionQueue.some(q => q && q.choices && q.choices.includes(k)));
+  const record={
+    date: dateStr,
+    score, total: targetCount, pct,
+    words:    [...wordsPlayed],
+    wrong:    wrongKanji.map(k => ({ ans: k, yomi: getReadings(k) })),
+    readings: [...correctReadings],
+    weak: weakEntries,
+    focus: usedFocus
+  };
+  addRecord(record);
+}
+
+// ---- クイズ描画 ----
+function renderQuestion(){
+  // 画面タップオーバーレイを除去
+  const ov=document.getElementById('tap-overlay');
+  if(ov) ov.remove();
+  if(total>=targetCount){renderFinish();return;}
+  quizActive=true;
+  answered=false;selected=new Set();currentQ=questionQueue[total]||null;
+  const qa=document.getElementById('quiz-area');
+  if(!currentQ||!currentQ.choices.length){
+    qa.innerHTML=`<div class="no-data">選択した学年の漢字が少なすぎます。<br>設定から出題範囲を追加してください。</div>`;
+    return;
+  }
+  updateScoreDisplay();
+  qa.innerHTML=`
+    <div class="reading-card">
+      <div class="reading-label">この音読みを持つ漢字をすべて選んでください</div>
+      <div class="reading-text">${currentQ.reading}</div>
+    </div>
+    <div class="choices" id="choices"></div>
+    <button class="submit-btn" id="submit-btn" onclick="submitAnswer()">答え合わせ</button>
+    <div id="result-area"></div>
+  `;
+  const grid=document.getElementById('choices');
+  for(const k of currentQ.choices){
+    const btn=document.createElement('div');
+    btn.className='choice-btn';btn.dataset.k=k;
+    btn.innerHTML=`<span class="choice-kanji">${k}</span><span class="choice-mark" id="m-${k}"></span>`;
+    btn.addEventListener('click',()=>toggleChoice(k,btn));
+    grid.appendChild(btn);
+  }
+}
+
+function renderFinish(){
+  quizActive=false;
+  sessionCount++;
+  saveRecord(); // 記録保存
+  const pct=Math.round(score/targetCount*100);
+  const perfectBonus = (score === targetCount) ? targetCount : 0;
+  const sessionPt = score + perfectBonus;
+  const rank = getRank(totalPoints);
+  const nextRank = getNextRank(totalPoints);
+  const nextMsg = nextRank ? `次の称号まで <b>${nextRank.min - totalPoints}pt</b>` : '最高称号達成！🎉';
+  document.getElementById('quiz-area').innerHTML=`
+    <div class="finish-card">
+      <div class="finish-title">完了！</div>
+      <div class="finish-score">${score}<span style="font-size:24px;color:#aaa"> / ${targetCount}</span></div>
+      <div class="finish-pct">正答率 ${pct}%</div>
+      <div class="finish-point-box">
+        <div class="finish-point-earned">今回獲得 +${sessionPt}pt${perfectBonus > 0 ? `（正解${score}問 + 全問正解ボーナス+${perfectBonus}pt）` : `（正解${score}問）`}</div>
+        <div class="finish-point-total">⭐ ${totalPoints} pt</div>
+        <div class="finish-rank">${rank.label}</div>
+        <div style="font-size:11px;color:#aaa;margin-top:4px">${nextMsg}</div>
+      </div>
+      <button class="restart-btn" onclick="restartQuiz()">もう一度</button>
+    </div>
+  `;
+  document.getElementById('weak-area').innerHTML='';
+  updateScoreDisplay();
+}
+
+window.restartQuiz=function(){
+  score=0;total=0;weakMap={};correctReadings=new Set();wordsPlayed=[];wrongKanji=[];
+  questionQueue=buildQuestionQueue();
+  renderQuestion();updateScoreDisplay();
+};
+
+function toggleChoice(k,btn){
+  if(answered)return;
+  if(selected.has(k)){selected.delete(k);btn.classList.remove('selected');document.getElementById('m-'+k).textContent='';}
+  else{selected.add(k);btn.classList.add('selected');document.getElementById('m-'+k).textContent='✓';}
+}
+
+window.submitAnswer=function(){
+  if(answered)return;
+  answered=true;total++;
+  const correct=currentQ.correctSet;
+  const missed=[...correct].filter(k=>!selected.has(k));
+  const extra=[...selected].filter(k=>!correct.has(k));
+  const isOK=missed.length===0&&extra.length===0;
+  if(isOK){score++;correctReadings.add(currentQ.reading);}
+  // 出題音読みを記録（重複なし）
+  if(!wordsPlayed.includes(currentQ.reading)) wordsPlayed.push(currentQ.reading);
+  // 間違えた漢字を記録（missedとextraを合わせて重複なし）
+  [...missed, ...extra].forEach(k => { if(!wrongKanji.includes(k)) wrongKanji.push(k); });
+  // ポイント加算（1問=1pt、正解=追加10pt）
+  const earnedPt = isOK ? 1 : 0;
+  savePoints(loadPoints() + earnedPt);
+  totalPoints = loadPoints();
+  missed.forEach(k=>{if(!weakMap[k])weakMap[k]={missed:0,extra:0};weakMap[k].missed++;});
+  extra.forEach(k=>{if(!weakMap[k])weakMap[k]={missed:0,extra:0};weakMap[k].extra++;});
+  document.querySelectorAll('.choice-btn').forEach(btn=>{
+    const k=btn.dataset.k;btn.classList.remove('selected');
+    const m=document.getElementById('m-'+k);m.textContent='';
+    if(correct.has(k)&&selected.has(k)){btn.classList.add('correct');m.textContent='✓';}
+    else if(correct.has(k)&&!selected.has(k)){btn.classList.add('missed');m.textContent='△';}
+    else if(!correct.has(k)&&selected.has(k)){btn.classList.add('wrong');m.textContent='✗';}
+  });
+  let html='';
+  if(isOK){
+    html=`<div class="result-box result-correct"><div class="result-title">正解！ <span style="font-size:14px;color:#E8A020">+${earnedPt}pt ⭐</span></div></div>`;
+  } else {
+    let d='';
+    if(missed.length) d+=`<div class="result-detail-label">不足（選ぶべきだった）</div><div class="tag-row">${missed.map(k=>`<span class="tag tag-missed">${k}</span>`).join('')}</div>`;
+    if(extra.length)  d+=`<div class="result-detail-label" style="margin-top:8px">余分（選ぶべきでなかった）</div><div class="tag-row">${extra.map(k=>`<span class="tag tag-wrong">${k}</span>`).join('')}</div>`;
+    html=`<div class="result-box result-wrong"><div class="result-title">不正解</div>${d}</div>`;
+  }
+  document.getElementById('result-area').innerHTML=html;
+  updateScoreDisplay();
+  const sb=document.getElementById('submit-btn');
+  sb.textContent=total<targetCount?'次の問題 →':'結果を見る';
+  sb.classList.add('next');
+  sb.onclick=()=>{renderQuestion();};
+  // 画面全体タップで次へ
+  const overlay=document.createElement('div');
+  overlay.id='tap-overlay';
+  overlay.style.cssText='position:fixed;top:0;left:0;width:100%;height:100%;z-index:999;cursor:pointer;-webkit-tap-highlight-color:transparent;';
+  overlay.addEventListener('click',()=>{renderQuestion();});
+  document.body.appendChild(overlay);
+};
+
+// ---- 記録ページ ----
+// ---- サブタブ切替（jukugo方式） ----
+// showSubTab → AppCore.tabs.switchSub に移行済み
+AppCore.tabs.onSubSwitch('list', () => renderPrintPreview());
+function showSubTab(id, btn) { AppCore.tabs.switchSub(id, btn); }
+window.showSubTab = showSubTab;
+
+function renderPrintPreview() {
+  const area = document.getElementById('print-area');
+  if (!area) return;
+  const dateFrom = document.getElementById('print-date-from')?.value || '';
+  const records = loadRecords().filter(r => !dateFrom || r.date.slice(0,10).replace(/\//g,'-') >= dateFrom);
+  if (!records.length) {
+    area.innerHTML = '<div class="print-empty">表示できる記録がありません</div>';
+    return;
+  }
+  let html = '';
+  for (const r of records) {
+    // 出題された問題（音読み）
+    const wordsHtml = (r.words && r.words.length)
+      ? `<div class="print-card-label">出題された問題</div>
+         <div class="print-card-words">${r.words.join('・')}</div>`
+      : '';
+    // 間違えた問題（漢字）
+    const wrongHtml = (r.wrong && r.wrong.length)
+      ? `<div class="print-card-label">間違えた問題</div>
+         <div class="print-card-wrong">${r.wrong.map(w =>
+             `<span class="print-card-wrong-item">${w.ans}（${w.yomi}）</span>`
+           ).join('')}</div>`
+      : '';
+    html += `<div class="print-card">
+      <div class="print-card-date">${r.date}</div>
+      <div class="print-card-row"><div class="print-card-score">${r.pct}%</div><div class="print-card-count">${r.score} / ${r.total} 問正解</div></div>
+      ${wordsHtml}${wrongHtml}
+    </div>`;
+  }
+  area.innerHTML = html;
+}
+window.renderPrintPreview = renderPrintPreview;
+
+function execClearRecords() {
+  saveRecords([]);
+  renderPrintPreview();
+  const listTab = document.querySelector('.sub-tab');
+  showSubTab('list', listTab);
+}
+window.execClearRecords = execClearRecords;
+
+function cancelDelete() {
+  const listTab = document.querySelector('.sub-tab');
+  showSubTab('list', listTab);
+}
+window.cancelDelete = cancelDelete;
+
+function clearDateFilter() {
+  const el = document.getElementById('print-date-from');
+  if (el) { el.value = ''; renderPrintPreview(); }
+}
+window.clearDateFilter = clearDateFilter;
+
+function printRecords() { renderPrintPreview(); window.print(); }
+window.printRecords = printRecords;
+
+// clearRecords → execClearRecords / cancelDelete に統合済み
+
+// ---- 設定ページ ----
+function renderSettingsPage(){
+  const sa=document.getElementById('settings-area');
+  sa.innerHTML=`
+    <div class="section-card">
+      <div class="section-title">データのバックアップ・復元</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button class="focus-add-btn" style="width:100%;padding:10px;font-size:13px" onclick="backupData()">💾 バックアップをダウンロード</button>
+        <label style="display:block;width:100%;padding:10px;border-radius:10px;background:#f0f8ff;border:1.5px solid #90b8e8;color:#1a4a9e;font-size:13px;font-weight:600;cursor:pointer;text-align:center">
+          📂 バックアップから復元
+          <input type="file" accept=".json" style="display:none" onchange="restoreData(event)">
+        </label>
+        <div id="restore-confirm-box" style="display:none;margin-top:8px;padding:10px;background:#fff3f3;border:1px solid #f5c4b3;border-radius:8px"></div>
+        <div style="font-size:11px;color:#aaa;line-height:1.6">※ バックアップにはポイント・学習記録・重点漢字が含まれます。<br>※ 復元すると現在のデータは上書きされます。</div>
+      </div>
+    </div>
+    <div class="section-card">
+      <div class="section-title">出題範囲（複数選択可）</div>
+      <div class="filter-row" id="filter-row"></div>
+    </div>
+    <div class="section-card" id="focus-ratio-card">
+      <div class="section-title">今週の重点漢字 / 重点漢字の出題数</div>
+      <div class="focus-input-row">
+        <input id="focus-input" class="focus-input" type="text" placeholder="例：学校生活…" maxlength="20" onkeydown="handleFocusKeydown(event)">
+        <button class="focus-add-btn" onclick="handleFocusAdd()">追加</button>
+      </div>
+      <div id="focus-warn" class="focus-warn"></div>
+      <div id="focus-tags" class="focus-tags"></div>
+      <div class="focus-control-row">
+        <button id="focus-clear-all" class="focus-clear-btn" onclick="clearAllFocus()" ${focusKanji.length===0?'disabled':''}>重点漢字をすべて削除</button>
+        <div class="focus-ratio-mini" id="focus-ratio-row" aria-label="重点漢字の出題数"></div>
+      </div>
+    </div>
+    <div class="section-card">
+      <div class="section-title">問題数</div>
+      <div class="count-row" id="count-row"></div>
+    </div>
+    <div class="section-card">
+      <div class="section-title">ポイント・称号</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-size:22px;font-weight:700;color:#E8A020">⭐ <span id="settings-point-disp">${totalPoints}</span> pt</div>
+        <div style="font-size:14px;font-weight:600;color:#555" id="settings-rank-disp">${getRank(totalPoints).label}</div>
+      </div>
+      <button class="point-reset-btn" onclick="resetPoints()">ポイントをリセット</button>
+    </div>
+  `;
+  renderCountBtns();
+  renderFilterBtns();
+  renderFocusTags();
+  renderFocusRatioBtns();
+}
+
+function renderFocusRatioBtns(){
+  const row=document.getElementById('focus-ratio-row');if(!row)return;
+  row.style.opacity=focusKanji.length===0?'0.45':'1';
+  row.innerHTML='';
+  const opts=[['all','全部'],['half','半分'],['none','なし']];
+  for(const [val,label] of opts){
+    const btn=document.createElement('button');
+    btn.className='count-btn'+(focusRatio===val?' active':'');
+    btn.textContent=label;
+    btn.disabled=focusKanji.length===0;
+    btn.onclick=(v=>()=>{
+      if(focusKanji.length===0) return; // 重点漢字がなければ無効
+      focusRatio=v;
+      resetAndRestart();
+      renderFocusRatioBtns();
+    })(val);
+    row.appendChild(btn);
+  }
+}
+
+function renderCountBtns(){
+  const cr=document.getElementById('count-row');if(!cr)return;
+  cr.innerHTML='';
+  for(const n of [10,20,30]){
+    const btn=document.createElement('button');
+    btn.className='count-btn'+(targetCount===n?' active':'');
+    btn.textContent=`${n}問`;
+    btn.onclick=(nn=>()=>{
+      targetCount=nn;score=0;total=0;weakMap={};correctReadings=new Set();wordsPlayed=[];wrongKanji=[];quizActive=false;sessionCount=0;
+      questionQueue=buildQuestionQueue();
+      renderCountBtns();updateScoreDisplay();renderQuestion();
+    })(n);
+    cr.appendChild(btn);
+  }
+}
+
+function renderFilterBtns(){
+  const fr=document.getElementById('filter-row');if(!fr)return;
+  fr.innerHTML='';
+  const allActive=selectedGrades.size===0;
+  const allBtn=document.createElement('button');
+  allBtn.className='filter-btn'+(allActive?' active':'');
+  allBtn.innerHTML=`全て<span class="filter-count">${countByGrade(0)}</span>`;
+  allBtn.onclick=()=>{selectedGrades.clear();resetAndRestart();};
+  fr.appendChild(allBtn);
+  for(let g=1;g<=6;g++){
+    const gs=String(g); // JSONのgは文字列なので合わせる
+    const btn=document.createElement('button');
+    btn.className='filter-btn'+(selectedGrades.has(gs)?' active':'');
+    btn.innerHTML=`${g}年<span class="filter-count">${countByGrade(gs)}</span>`;
+    btn.onclick=(gg=>()=>{if(selectedGrades.has(gg))selectedGrades.delete(gg);else selectedGrades.add(gg);resetAndRestart();})(gs);
+    fr.appendChild(btn);
+  }
+  for(const g of['中','高']){
+    const btn=document.createElement('button');
+    btn.className='filter-btn'+(selectedGrades.has(g)?' active':'');
+    btn.innerHTML=`${g}学<span class="filter-count">${countByGrade(g)}</span>`;
+    btn.onclick=(gg=>()=>{if(selectedGrades.has(gg))selectedGrades.delete(gg);else selectedGrades.add(gg);resetAndRestart();})(g);
+    fr.appendChild(btn);
+  }
+}
+
+function resetAndRestart(){
+  score=0;total=0;weakMap={};correctReadings=new Set();wordsPlayed=[];wrongKanji=[];quizActive=false;sessionCount=0;
+  questionQueue=buildQuestionQueue();
+  renderFilterBtns();renderQuestion();updateScoreDisplay();
+}
+
+// ---- 重点漢字 ----
+function addFocusKanji(input){
+  const chars=[...input].filter(c=>{const code=c.codePointAt(0);return(code>=0x4E00&&code<=0x9FFF)||(code>=0x3400&&code<=0x4DBF);});
+  const warn=document.getElementById('focus-warn');
+  const notInDb=[];
+  for(const c of chars){
+    if(!focusKanji.includes(c)){
+      const inDb=db.find(e=>e.k===c&&e.r.length>0);
+      if(inDb)focusKanji.push(c);else notInDb.push(c);
+    }
+  }
+  if(warn)warn.textContent=notInDb.length?`「${notInDb.join('・')}」はデータに存在しないか音読みがありません`:'';
+  saveFocusToStorage(focusKanji);renderFocusTags();
+}
+function renderFocusTags(){
+  const container=document.getElementById('focus-tags');if(!container)return;
+  const clearBtn=document.getElementById('focus-clear-all');
+  container.innerHTML=focusKanji.length===0
+    ?'<span class="focus-empty">まだ登録されていません</span>'
+    :focusKanji.map(k=>`<span class="focus-tag">${k}<span class="focus-tag-remove" onclick="removeFocus('${k}')">×</span></span>`).join('');
+  if(clearBtn)clearBtn.disabled=focusKanji.length===0;
+  renderFocusRatioBtns();
+}
+window.removeFocus=k=>{focusKanji=focusKanji.filter(c=>c!==k);saveFocusToStorage(focusKanji);renderFocusTags();};
+window.clearAllFocus=()=>{
+  if(!focusKanji.length)return;
+  if(!confirm('重点漢字をすべて削除しますか？'))return;
+  focusKanji=[];saveFocusToStorage(focusKanji);renderFocusTags();
+};
+window.handleFocusAdd=()=>{
+  const input=document.getElementById('focus-input');
+  if(!input||!input.value.trim())return;
+  addFocusKanji(input.value.trim());input.value='';
+};
+window.handleFocusKeydown=e=>{if(e.key==='Enter')window.handleFocusAdd();};
+
+
+// ---- 苦手記録 ----
+window.clearWeak=function(){weakMap={};const wa=document.getElementById('weak-area');if(wa)wa.innerHTML='';};
+
+function getReadings(k){
+  const entry=db.find(e=>e.k===k);
+  return entry?entry.r.join('・'):'';
+}
+
+function renderWeak(){
+  const entries=Object.entries(weakMap).filter(([,v])=>v.missed>0||v.extra>0);
+  const wa=document.getElementById('weak-area');if(!wa)return;
+  if(!entries.length){wa.innerHTML='';return;}
+  entries.sort((a,b)=>(b[1].missed+b[1].extra)-(a[1].missed+a[1].extra));
+  let html=`<div class="weak-section"><div class="weak-header"><div class="weak-title">苦手記録（${entries.length}文字）</div><button class="weak-clear" onclick="clearWeak()">リセット</button></div><div class="weak-grid">`;
+  for(const [k,v] of entries){
+    const cls=v.missed>=v.extra?'wm':'we';
+    html+=`<div class="weak-item ${cls}"><span class="weak-kanji">${k}</span><span>${getReadings(k)}</span></div>`;
+  }
+  html+='</div></div>';
+  wa.innerHTML=html;
+}
+
+
+// ---- 記録サブタブ ---- （renderPrintArea は renderPrintPreview に統合済み）
+
+
+window.backupData = function(){
+  const data = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    points: totalPoints,
+    records: loadRecords(),
+    focus: focusKanji
+  };
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const d = new Date();
+  const dateStr = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+  a.href = url; a.download = `onyomi_backup_${dateStr}.json`;
+  a.click(); URL.revokeObjectURL(url);
+};
+
+window.restoreData = function(event){
+  const file = event.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    let data;
+    try {
+      data = JSON.parse(e.target.result);
+      if(data.version !== 1) throw new Error('形式が異なります');
+    } catch(err) {
+      showRestoreMsg('❌ 復元に失敗しました。正しいバックアップファイルか確認してください。', 'error');
+      event.target.value = ''; return;
+    }
+    const box = document.getElementById('restore-confirm-box');
+    if(!box) { event.target.value=''; return; }
+    box.style.display = 'block';
+    box.innerHTML = `
+      <div style="font-size:13px;color:#c0392b;margin-bottom:8px">⚠️ 現在のデータを上書きします。よろしいですか？</div>
+      <div style="display:flex;gap:8px">
+        <button onclick="doRestore()" style="flex:1;padding:8px;background:#1D9E75;color:white;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">復元する</button>
+        <button onclick="cancelRestore()" style="flex:1;padding:8px;background:#eee;color:#555;border:none;border-radius:8px;font-size:13px;cursor:pointer">キャンセル</button>
+      </div>`;
+    window._pendingRestoreData = data;
+    event.target.value = '';
+  };
+  reader.readAsText(file);
+};
+
+window.doRestore = function(){
+  const data = window._pendingRestoreData; if(!data) return;
+  if(typeof data.points === 'number') { totalPoints = data.points; savePoints(totalPoints); }
+  if(Array.isArray(data.records)) saveRecords(data.records);
+  if(Array.isArray(data.focus)) { focusKanji = data.focus; saveFocusToStorage(focusKanji); }
+  window._pendingRestoreData = null;
+  showRestoreMsg('✅ 復元が完了しました。', 'success');
+  renderSettingsPage();
+};
+
+window.cancelRestore = function(){
+  window._pendingRestoreData = null;
+  const box = document.getElementById('restore-confirm-box');
+  if(box) box.style.display = 'none';
+};
+
+function showRestoreMsg(msg, type){
+  const box = document.getElementById('restore-confirm-box');
+  if(!box) return;
+  box.style.display = 'block';
+  const color = type === 'success' ? '#1D9E75' : '#c0392b';
+  box.innerHTML = `<div style="font-size:13px;color:${color};text-align:center">${msg}</div>`;
+  setTimeout(()=>{ box.style.display='none'; }, 3000);
+}
+
+window.resetPoints = function(){
+  if(!confirm('⚠️ ポイントをリセットします。この操作は元に戻せません。本当によろしいですか？')) return;
+  totalPoints = 0;
+  resetPoints();
+  renderSettingsPage();
+};
+
+function renderRankList(){
+  const el = document.getElementById('rank-list'); if(!el) return;
+  const cur = getRank(totalPoints);
+  el.innerHTML = LEVELS.map(rk =>
+    `<div class="rank-row${rk.label===cur.label?' current':''}">
+      <span>${rk.label}</span>
+      <span>${rk.min}pt〜</span>
+    </div>`
+  ).join('');
+}
+
+// ---- 起動 ----
+fetch('../../data/OnyomiToKanji2022.json?v=settings-v3')
+  .then(r => r.json())
+  .then(data => {
+    Object.assign(globalThis, {_RAW: data});
+    new Promise(resolve => loadChunk(resolve)).then(() => {
+      questionQueue = buildQuestionQueue();
+      renderQuestion();
+      updateScoreDisplay();
+    });
+  })
+  .catch(e => {
+    const el = document.getElementById('quiz-area') || document.getElementById('quiz-loading') || document.body;
+    el.innerHTML =
+      '<div style="padding:40px;text-align:center;color:#c00">データの読み込みに失敗しました。<br>サーバー経由で開いてください。</div>';
+  });
+})();
+
+// ---- Service Worker登録 ----
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .catch(err => console.log('SW登録失敗:', err));
+  });
+}
+</script>
+</body>
+</html>

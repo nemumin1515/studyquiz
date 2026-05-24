@@ -1,0 +1,1271 @@
+/*
+ * common.css  v1.1
+ * 共通スタイル — jukugo_quiz.html をベースに3アプリ共通部分を抽出
+ *
+ * 使い方:
+ *   <link rel="stylesheet" href="../../core/ui/common.css">
+ *   <link rel="stylesheet" href="./app.css">   ← アプリ固有スタイル後に読み込む
+ *
+ * 構成:
+ *   1. CSS変数（カラー・サイズ）
+ *   2. リセット・ベース
+ *   3. タブバー（メインタブ・サブタブ）
+ *   4. ページ切替
+ *   5. プログレスバー
+ *   6. セクションカード
+ *   7. ボタン共通
+ *      7-1. アクションボタン（主操作・緑）
+ *      7-2. リストアボタン（復元・青）
+ *      7-3. サブミットボタン（問題送信）
+ *      7-4. カウント／選択ボタン（トグル系）
+ *      7-5. フィルターボタン（丸型トグル）
+ *      7-6. 学年ボタン
+ *      7-7. リセット・クリアボタン
+ *   8. 学年セレクター
+ *   9. 重点タグ（focus-tag）
+ *  10. ポイント表示
+ *  11. バックアップ注記
+ *  12. 印刷カード
+ *  13. 削除確認カード
+ *  14. 設定ページ レイアウト
+ *      14-1. 2カラム行（問題数＋ヒント）
+ *      14-2. 重点項目コントロール行
+ *      14-3. 重点項目 警告テキスト
+ *      14-4. 重点項目 全削除ボタン
+ *  15. @media print
+ */
+
+/* ============================================================
+   1. CSS変数
+   ============================================================ */
+:root {
+  /* ブランドカラー */
+  --green:        #1D9E75;
+  --green-light:  #e8f8f2;
+  --green-dark:   #0a6644;
+  --green-border: #5DCAA5;
+
+  --blue:         #4A90D9;
+  --blue-light:   #e8f2fc;
+  --blue-dark:    #1a4a9e;
+  --blue-border:  #90b8e8;
+
+  --red:          #D85A30;
+  --red-light:    #fef5f1;
+  --red-border:   #f8b89a;
+  --red-text:     #c0392b;
+
+  --orange:       #E8A020;
+  --orange-light: #fff8e6;
+  --orange-border:#f5d98a;
+
+  /* ニュートラル */
+  --bg:           #f5f5f0;
+  --panel:        #ffffff;
+  --border:       #e8e8e8;
+  --border-mid:   #d8d8d8;
+  --border-light: #e0e0e0;
+
+  --text:         #1a1a1a;
+  --text-sub:     #666;
+  --text-muted:   #888;
+  --text-faint:   #aaa;
+  --text-ghost:   #bbb;
+
+  /* 状態色 */
+  --ok:           #1D9E75;   /* 正解 */
+  --ok-bg:        #f0fdf8;
+  --ng:           #D85A30;   /* 不正解 */
+  --ng-bg:        #fef5f1;
+
+  /* サイズ */
+  --radius-sm:    8px;
+  --radius-md:    10px;
+  --radius-lg:    12px;
+  --radius-xl:    14px;
+  --radius-pill:  20px;
+
+  --tab-height:   45px;
+}
+
+/* ============================================================
+   2. リセット・ベース
+   ============================================================ */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  font-family: "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+}
+
+/* タッチ端末でのハイライト抑制（共通） */
+button {
+  -webkit-tap-highlight-color: transparent;
+  font-family: inherit;
+}
+
+/* ============================================================
+   3. タブバー
+   ============================================================ */
+
+/* メインタブ */
+.tab-bar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border-light);
+  display: flex;
+  justify-content: center;
+}
+
+.tab-bar > * {
+  flex: 1;
+  max-width: 200px;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 12px 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-faint);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color .15s;
+}
+
+.tab-btn.active {
+  color: var(--green);
+  border-bottom-color: var(--green);
+  font-weight: 700;
+}
+
+/* サブタブ（記録ページ内など） */
+.sub-tab-bar {
+  display: flex;
+  border-bottom: 1px solid var(--border-light);
+  margin-bottom: 12px;
+}
+
+.sub-tab {
+  flex: 1;
+  padding: 8px 4px;
+  font-size: 13px;
+  color: var(--text-faint);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  text-align: center;
+}
+
+.sub-tab.active {
+  color: var(--green);
+  border-bottom-color: var(--green);
+  font-weight: 600;
+}
+
+/* ============================================================
+   4. ページ切替
+   ============================================================ */
+.page {
+  display: none;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 10px;
+  min-height: calc(100vh - var(--tab-height));
+}
+
+.page.active {
+  display: block;
+}
+
+/* ============================================================
+   5. プログレスバー
+   ============================================================ */
+.progress-bar {
+  height: 4px;
+  background: var(--border-light);
+  border-radius: 2px;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--green);
+  border-radius: 2px;
+  transition: width 0.4s;
+}
+
+/* ============================================================
+   6. セクションカード
+   ============================================================ */
+.section-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.section-title {
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-bottom: 10px;
+  letter-spacing: 0.3px;
+}
+
+/* ============================================================
+   7. ボタン共通
+   ============================================================ */
+
+/* 7-1. アクションボタン（主操作・緑） */
+.action-btn {
+  width: 100%;
+  padding: 10px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--green);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.action-btn:active { opacity: 0.85; }
+
+/* 7-2. リストアボタン（復元・青） */
+.restore-btn {
+  width: 100%;
+  padding: 10px;
+  border: 1.5px solid var(--blue);
+  border-radius: var(--radius-md);
+  background: #f0f8ff;
+  color: var(--blue-dark);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.restore-btn:active { opacity: 0.85; }
+
+/* 7-3. サブミットボタン（問題送信） */
+.submit-btn {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--green);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 6px;
+  margin-top: 10px;
+  transition: transform .1s;
+}
+
+.submit-btn:active { transform: scale(0.98); }
+
+/* 7-4. カウント／選択ボタン（トグル系：問題数・ヒント・割合など） */
+.count-btn,
+.hint-btn,
+.ratio-btn {
+  flex: 1;
+  border: 1.5px solid var(--border-mid);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-sub);
+  background: #f9f9f9;
+  cursor: pointer;
+  text-align: center;
+  transition: all .15s;
+  padding: 8px 12px;
+}
+
+.count-btn.active,
+.hint-btn.active,
+.ratio-btn.active {
+  border-color: var(--blue);
+  background: var(--blue-light);
+  color: var(--blue-dark);
+  font-weight: 700;
+}
+
+.count-btn:disabled,
+.hint-btn:disabled,
+.ratio-btn:disabled {
+  border-color: var(--border-light);
+  background: #fafafa;
+  color: #ccc;
+  cursor: default;
+}
+
+/* 7-5. フィルターボタン（丸型トグル） */
+.filter-btn {
+  padding: 6px 0;
+  border: 1.5px solid var(--border-mid);
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  color: var(--text-sub);
+  background: #f9f9f9;
+  cursor: pointer;
+  text-align: center;
+  flex: 1;
+  min-width: 36px;
+  transition: all .15s;
+}
+
+.filter-btn.active {
+  border-color: var(--green);
+  background: var(--green-light);
+  color: var(--green-dark);
+  font-weight: 700;
+}
+
+/* 7-6. 学年ボタン */
+.grade-btn {
+  padding: 6px 0;
+  border: 1.5px solid var(--border-mid);
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  color: var(--text-sub);
+  background: #f9f9f9;
+  cursor: pointer;
+  text-align: center;
+  flex: 1;
+  min-width: 36px;
+  transition: all .15s;
+}
+
+.grade-btn:hover { opacity: 0.8; }
+
+.grade-btn.selected {
+  border-color: var(--green);
+  background: var(--green-light);
+  color: var(--green-dark);
+  font-weight: 700;
+}
+
+/* 7-7. リセット・クリアボタン（小さいサブ操作用） */
+.btn-reset {
+  padding: 6px 14px;
+  border: 1.5px solid var(--border-mid);
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  color: var(--text-muted);
+  background: #fafafa;
+  cursor: pointer;
+  height: auto !important;
+}
+
+.btn-reset:active { opacity: 0.7; }
+
+/* 削除・危険操作ボタン */
+.danger-btn {
+  padding: 6px 14px;
+  border: 1.5px solid var(--red-border);
+  border-radius: var(--radius-pill);
+  background: #fff;
+  color: var(--red-text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.danger-btn:active { opacity: 0.8; }
+
+/* ============================================================
+   8. 学年セレクター
+   ============================================================ */
+.grade-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.selected-label {
+  font-size: 12px;
+  color: var(--green);
+  min-height: 18px;
+  margin-top: 4px;
+}
+
+/* ============================================================
+   9. 重点タグ（focus-tag）
+   ============================================================ */
+.focus-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.focus-tag {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--green-light);
+  border: 1.5px solid var(--green-border);
+  border-radius: var(--radius-pill);
+  padding: 4px 10px;
+  font-size: 14px;
+  color: var(--green-dark);
+}
+
+.focus-tag-del,
+.focus-tag-remove {
+  background: none;
+  border: none;
+  color: var(--green-border);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.focus-input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1.5px solid var(--border-mid);
+  border-radius: var(--radius-md);
+  font-size: 16px;
+  color: var(--text);
+  background: #fafafa;
+  outline: none;
+  margin-bottom: 10px;
+  display: block;
+  font-family: inherit;
+}
+
+.focus-input:focus {
+  border-color: var(--green);
+  background: var(--panel);
+}
+
+.focus-add-btn {
+  padding: 10px 16px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--green);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.focus-add-btn:active { opacity: 0.8; }
+
+/* ============================================================
+   10. ポイント表示
+   ============================================================ */
+.point-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.point-val {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--orange);
+}
+
+.point-rank {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-sub);
+}
+
+/* スコアバッジ（ヘッダー右上小型） */
+.score-badge {
+  font-size: 12px;
+  color: #b07800;
+  background: var(--orange-light);
+  border: 1px solid var(--orange-border);
+  border-radius: var(--radius-pill);
+  padding: 3px 10px;
+}
+
+.point-reset-btn {
+  width: 100%;
+  padding: 8px;
+  border: 1.5px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: #fafafa;
+  color: var(--text-faint);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* ============================================================
+   11. バックアップ注記
+   ============================================================ */
+.backup-note {
+  font-size: 11px;
+  color: var(--text-faint);
+  line-height: 1.6;
+}
+
+/* ============================================================
+   12. 印刷カード
+   ============================================================ */
+.print-card {
+  background: var(--panel);
+  border: 1px solid #ddd;
+  border-radius: var(--radius-md);
+  padding: 12px;
+  margin-bottom: 10px;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.print-card-date  { font-size: 11px; color: var(--text-ghost); margin-bottom: 4px; }
+.print-card-score { font-size: 22px; font-weight: 700; color: var(--green); }
+.print-card-count { font-size: 12px; color: var(--text-muted); margin-bottom: 5px; }
+.print-card-label { font-size: 11px; color: var(--text-faint); margin-bottom: 4px; margin-top: 6px; }
+.print-card-words { font-size: 13px; color: #333; margin-bottom: 2px; }
+
+.print-card-wrong { display: flex; flex-wrap: wrap; gap: 4px; }
+.print-card-wrong-item {
+  background: var(--red-light);
+  border: 1px solid var(--red-border);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 12px;
+  color: var(--red-text);
+}
+
+/* 印刷フィルター行 */
+.print-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.print-filter-label { font-size: 12px; color: var(--text-faint); }
+
+.print-date-input {
+  padding: 8px 10px;
+  border: 1.5px solid var(--border-mid);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--text);
+  background: #fafafa;
+  outline: none;
+  flex: 1;
+  font-family: inherit;
+}
+
+.print-date-input:focus { border-color: var(--green); }
+
+.print-clear-btn {
+  padding: 8px 12px;
+  border: 1px solid var(--border-mid);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.print-empty {
+  text-align: center;
+  padding: 30px 0;
+  color: var(--text-ghost);
+  font-size: 13px;
+}
+
+.print-trigger-btn {
+  width: 100%;
+  padding: 11px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: #555;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ============================================================
+   13. 削除確認カード
+   ============================================================ */
+.delete-confirm-card {
+  background: var(--panel);
+  border: 1px solid var(--red-border);
+  border-radius: var(--radius-xl);
+  padding: 28px 20px;
+  text-align: center;
+  margin-top: 20px;
+}
+
+.delete-confirm-icon  { font-size: 36px; margin-bottom: 12px; }
+.delete-confirm-title { font-size: 16px; font-weight: 600; color: var(--red-text); margin-bottom: 8px; }
+.delete-confirm-note  { font-size: 13px; color: var(--text-muted); margin-bottom: 20px; }
+
+.delete-confirm-btns  { display: flex; gap: 10px; }
+
+.delete-exec-btn {
+  flex: 1;
+  padding: 12px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: #e57373;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.delete-exec-btn:active { opacity: 0.8; }
+
+.delete-cancel-btn {
+  flex: 1;
+  padding: 12px;
+  border: 1.5px solid var(--border-mid);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  color: #555;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.delete-cancel-btn:active { opacity: 0.8; }
+
+/* ============================================================
+   14. 設定ページ レイアウト
+   ============================================================ */
+
+/* 14-1. 2カラム行（問題数＋ヒントを横並び） */
+.two-col {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+  align-items: stretch;
+}
+
+/* two-col内のsection-cardはmargin-bottomを打ち消す */
+.two-col .section-card {
+  margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.two-col .section-card.count { flex: 2; }
+.two-col .section-card.hint  { flex: 1; }
+
+.count-row,
+.hint-row {
+  display: flex;
+  gap: 6px;
+  flex: 1;
+  align-items: stretch;
+}
+
+/* 14-2. 重点項目 コントロール行（割合ボタン＋全削除ボタン） */
+.focus-control-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.focus-control-row .focus-clear-btn {
+  flex: 1 1 170px;
+  margin-top: 0;
+}
+
+/* 重点項目 割合ボタン（ミニサイズ） */
+.focus-ratio-mini {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.focus-ratio-mini .count-btn {
+  flex: 0 0 auto;
+  padding: 7px 9px;
+  font-size: 12px;
+  border-radius: 9px;
+  white-space: nowrap;
+  min-width: 44px;
+}
+
+/* 重点ヘッダー行（jukugo: タイトル左＋割合ラベル右） */
+.focus-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.focus-header-left  { font-size: 12px; color: var(--text-faint); letter-spacing: 0.3px; }
+.focus-header-right { display: flex; align-items: center; gap: 6px; }
+.focus-header-label { font-size: 11px; color: var(--text-faint); }
+
+.ratio-row { display: flex; gap: 4px; }
+
+/* focus-bottom（タグ一覧＋追加ボタンの横並び） */
+.focus-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.focus-bottom .focus-tags    { flex: 1; margin-bottom: 0; }
+.focus-bottom .focus-add-btn { margin-left: 8px; }
+
+/* 14-3. 重点項目 警告テキスト */
+.focus-warn {
+  font-size: 11px;
+  color: #e67e22;
+  margin-bottom: 6px;
+  min-height: 16px;
+}
+
+/* 14-4. 重点項目 全削除ボタン */
+.focus-clear-btn {
+  display: block;
+  width: 100%;
+  padding: 8px;
+  border: 1.5px solid var(--red-border);
+  border-radius: var(--radius-md);
+  background: #fff8f5;
+  color: var(--red-text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  margin-top: 4px;
+}
+
+.focus-clear-btn:active   { opacity: 0.7; }
+.focus-clear-btn:disabled {
+  border-color: var(--border-light);
+  background: #fafafa;
+  color: #ccc;
+  cursor: default;
+}
+
+/* ============================================================
+   15. @media print
+   ============================================================ */
+@media print {
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+
+  body { background: #fff !important; }
+
+  /* タブバー・操作UIを非表示 */
+  .tab-bar,
+  .sub-tab-bar,
+  .print-btn-row,
+  .print-filter-row,
+  .btn-reset,
+  .danger-btn,
+  .action-btn,
+  .restore-btn {
+    display: none !important;
+  }
+
+  /* 印刷エリアを2列グリッドに */
+  .print-area {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 4mm;
+  }
+
+  .print-card {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+}
+
+/* ============================================================
+   ここから熟語.css
+   ============================================================ */
+
+   /*
+ * jukugo.css v1
+ * 熟語クイズ アプリ固有スタイル
+ *
+ * 読み込み順:
+ *   <link rel="stylesheet" href="../../core/ui/common.css">
+ *   <link rel="stylesheet" href="./jukugo.css">
+ */
+
+/* ============================================================
+   クイズページ ヘッダー
+   ============================================================ */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.title  { font-size: 16px; font-weight: 600; color: #1a1a1a; }
+.score  { font-size: 13px; color: #888; }
+
+/* ポイントバッジ（ヘッダー内） */
+.point-disp {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #E8A020;
+  background: #fff8e6;
+  border: 1px solid #f5d98a;
+  border-radius: 20px;
+  padding: 3px 10px;
+}
+
+.point-star { font-size: 13px; }
+
+
+
+/* ===== 問題ページ ===== */
+.q-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px;
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+.q-label {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.reading {
+  font-size: 36px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 4px;
+  margin-bottom: 2px;
+  line-height: 1.3;
+}
+
+.hint-text {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+  min-height: 16px;
+}
+
+/* ===== 選択パネル群 ===== */
+.panels-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.panel-label {
+  font-size: 11px;
+  color: var(--faint);
+  margin-bottom: 4px;
+  text-align: center;
+}
+
+.choices {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+}
+
+.choice {
+  background: var(--panel);
+  border: 1.5px solid var(--border-m);
+  border-radius: 12px;
+  height: 62px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  position: relative;
+  transition: border-color .15s, background .15s;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.choice:active  { transform: scale(0.95); }
+.choice.sel     { border-color: var(--green); background: var(--ok-bg); }
+.choice.ok      { border-color: var(--green); background: var(--ok-bg); }
+.choice.ng      { border-color: var(--red);   background: var(--ng-bg); }
+
+.choice .mark {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--green);
+}
+.choice.ng .mark { color: var(--red); }
+
+/* ===== リザルトボックス ===== */
+.result-box {
+  border-radius: var(--r-lg);
+  padding: 10px 14px;
+  margin-top: 10px;
+  margin-bottom: 6px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.result-ok { border: 3px solid var(--ok); background: var(--ok-bg); }
+.result-ng { border: 3px solid var(--ng); background: var(--ng-bg); }
+
+.result-kanji {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 4px;
+}
+
+.result-yomi {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.next-hint {
+  position: absolute;
+  bottom: 5px;
+  right: 10px;
+  font-size: 10px;
+  color: var(--faint);
+}
+
+.next-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  border-radius: var(--r-lg);
+  cursor: pointer;
+}
+
+.quiz-wrap { position: relative; }
+
+/* ===== リトライボタン ===== */
+.retry-btn {
+  width: 100%;
+  padding: 12px;
+  border: 1.5px solid var(--green);
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  color: var(--green);
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  -webkit-tap-highlight-color: transparent;
+}
+.retry-btn:active { opacity: 0.8; }
+
+/* ===== セッション終了画面 ===== */
+.session-end {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px 16px;
+  text-align: center;
+  margin-top: 16px;
+}
+
+.session-end h2 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--green);
+  margin-bottom: 4px;
+}
+
+.session-end .pct {
+  font-size: 48px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.1;
+  margin: 12px 0 4px;
+}
+
+.session-end .score-line {
+  font-size: 14px;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+
+.session-end .pt-earned {
+  font-size: 14px;
+  color: #b07800;
+  background: var(--orange-l);
+  border: 1px solid var(--orange-b);
+  border-radius: var(--r-pill);
+  padding: 4px 14px;
+  display: inline-block;
+  margin-bottom: 16px;
+}
+
+.session-end .wrong-list {
+  text-align: left;
+  margin-bottom: 16px;
+}
+
+.session-end .wrong-title {
+  font-size: 12px;
+  color: var(--faint);
+  margin-bottom: 6px;
+}
+
+.session-wrong-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.session-wrong-item {
+  background: var(--red-l);
+  border: 1px solid var(--red-b);
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 13px;
+  color: var(--red-t);
+}
+
+.session-end-btns {
+  display: flex;
+  gap: 8px;
+  flex-direction: column;
+}
+
+/* ===== 設定ページ 固有 ===== */
+
+/* 絞り込みボタン行 */
+.filter-row {
+  display: flex;
+  justify-content: space-between; /* 両端に引き離す */
+  gap: 10px;           /* ラベルとセレクトボックスの間のすき間 */
+}
+
+/* ラベルの横幅を固定する */
+.filter-row label {
+  width: 20%;         /* 文字数に合わせて調整してください（例: 80pxや100px） */
+  flex-shrink: 0;      /* 画面が狭くなってもラベルが潰れないようにするお守り */
+}
+
+/* セレクトボックスを右側の残りスペースいっぱいに広げる */
+.filter-row select {
+  flex-grow: 1;        
+}
+
+.filter-btn {
+  padding: 6px 0;
+  border: 1.5px solid var(--border-m);
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  color: var(--sub);
+  background: #f9f9f9;
+  text-align: center;
+  flex: 1;
+  min-width: 36px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.filter-btn.active {
+  border-color: var(--green);
+  background: var(--green-l);
+  color: var(--green-d);
+  font-weight: 700;
+}
+
+/* 送り仮名パネル（2〜3択・列数を自動調整） */
+.choices-okuri {
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+}
+
+/* 送り仮名パネル（小さめフォント） */
+.choice-okuri {
+  font-size: 18px;
+  font-family: "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+}
+.filter-count {
+  display: inline-block;
+  font-size: 10px;
+  color: var(--faint);
+  margin-left: 3px;
+}
+.filter-btn.active .filter-count {
+  color: var(--green-d);
+}
+
+.filter-sub-label {
+  font-size: 11px;
+  color: var(--faint);
+  margin-top: 8px;
+  margin-bottom: 4px;
+}
+
+/* 重点問題 ヘッダー */
+.focus-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.focus-header-left  { font-size: 12px; color: var(--faint); }
+.focus-header-right { display: flex; align-items: center; gap: 6px; }
+.focus-header-label { font-size: 11px; color: var(--faint); }
+.ratio-row          { display: flex; gap: 4px; }
+
+/* 重点 警告テキスト */
+.focus-warn {
+  font-size: 11px;
+  color: #e67e22;
+  min-height: 16px;
+  margin-top: 6px;
+}
+
+/* 重点 全削除ボタン */
+.focus-clear-btn {
+  display: block;
+  width: 100%;
+  padding: 8px;
+  border: 1.5px solid var(--red-b);
+  border-radius: var(--r-md);
+  background: #fff8f5;
+  color: var(--red-t);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  margin-top: 8px;
+  cursor: pointer;
+}
+
+.focus-clear-btn:active  { opacity: 0.7; }
+.focus-clear-btn:disabled {
+  border-color: var(--border-l);
+  background: #fafafa;
+  color: #ccc;
+  cursor: default;
+}
+
+/* 復元確認ボックス */
+#restore-confirm-box {
+  margin-top: 10px;
+  padding: 10px;
+  background: #fff9f5;
+  border: 1px solid var(--red-b);
+  border-radius: var(--r-md);
+  display: none;
+}
+
+/* ローディング */
+.loading {
+  text-align: center;
+  padding: 60px 0;
+  color: var(--faint);
+  font-size: 14px;
+}
+
+/* ===== 印刷 ===== */
+@media print {
+  .tab-bar, .sub-tab-bar, .rec-header,
+  .print-btn-row, .print-filter-row { display: none !important; }
+
+  #page-quiz, #page-setting { display: none !important; }
+
+  #page-record { display: block !important; padding: 0; }
+  #sub-list    { display: block !important; }
+  #sub-delete  { display: none !important; }
+
+  @page { size: A4; margin: 10mm; }
+
+  .print-area {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4mm;
+  }
+
+  .print-card { break-inside: avoid; }
+}
+
+.rank-up-box {
+  text-align: center;
+  margin: 12px 0 16px;
+}
+
+.rank-up-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.rank-up-image {
+  width: 192px;
+  height: 192px;
+  object-fit: contain;
+}
+
+.rank-up-label {
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* 出題範囲ボタン：スマホで折り返す */
+#grade-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ボタンが横に広がりすぎないようにする */
+#grade-filter-row .filter-btn {
+  flex: 0 0 auto;
+  min-width: 52px;
+  white-space: nowrap;
+}
+
+/* 選択中ラベルも折り返し */
+#selected-label {
+  white-space: normal;
+  word-break: keep-all;
+}
+
+.section-card {
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
+}

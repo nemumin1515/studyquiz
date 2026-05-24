@@ -1,0 +1,1439 @@
+
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>熟語クイズ</title>
+<!-- 共通CSS → アプリ固有CSS の順 -->
+<link rel="stylesheet" href="../../core/ui/common.css">
+<!-- <link rel="stylesheet" href="./jukugo.css"> -->
+</head>
+<body>
+
+<!-- タブバー -->
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="showPage('quiz',this)">問題</button>
+  <button class="tab-btn" onclick="showPage('record',this)">記録</button>
+  <button class="tab-btn" onclick="showPage('setting',this)">設定</button>
+</div>
+
+<!-- ===== 問題ページ ===== -->
+<div class="page active" id="page-quiz">
+  <div id="quiz-loading" class="loading">読み込み中…</div>
+  <div id="quiz-main" style="display:none">
+
+  <div class="header">
+    <div>
+      <div class="title">熟語クイズ</div>
+      <div style="font-size:11px;color:#bbb;margin-top:1px" id="point-rank-disp"></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="font-size:11px;color:#888" id="header-rank-disp"></div>
+      <div class="point-disp"><span class="point-star">⭐</span><span id="point-disp">0 pt</span></div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+        <div style="font-size:11px;color:#bbb" id="session-disp"></div>
+        <div class="score" id="score-disp">0 / 10 問</div>
+      </div>
+    </div>
+  </div>
+
+    <div class="progress-bar">
+      <div class="progress-fill" id="progress" style="width:0%"></div>
+    </div>
+    <div class="quiz-wrap" id="quiz-wrap"><!-- 動的生成 --></div>
+  </div>
+</div>
+
+<!-- ===== 記録ページ ===== -->
+<div class="page" id="page-record">
+  <div class="rec-header">
+    <span class="rec-title">学習記録</span>
+  </div>
+  
+  <div class="sub-tab-bar">
+    <button class="sub-tab" onclick="showSubTab('print',this)">印刷プレビュー</button>
+    <button class="sub-tab" onclick="showSubTab('delete',this)">記録を削除</button>
+  </div>
+
+  <!-- 一覧 -->
+  <div id="sub-list" style="display:none">
+    <div id="rec-list-body"></div>
+  </div>
+
+  <!-- 印刷プレビュー -->
+  <div id="sub-print" style="display:none">
+    <div class="print-filter-row">
+      <label class="print-filter-label">以降の記録を表示</label>
+      <input type="date" id="print-date-from" class="print-date-input"
+             onchange="renderPrintPreview()">
+      <button class="print-clear-btn" onclick="clearDateFilter()">クリア</button>
+    </div>
+    <div class="print-btn-row">
+      <button class="print-trigger-btn" onclick="printRecords()">🖨 印刷する</button>
+    </div>
+    <div class="print-area" id="print-area"></div>
+  </div>
+
+  <!-- 削除 -->
+  <div id="sub-delete" style="display:none">
+    <div class="delete-confirm-card">
+      <div class="delete-confirm-icon">⚠️</div>
+      <div class="delete-confirm-title">学習記録をすべて削除します</div>
+      <div class="delete-confirm-note">この操作は元に戻せません。</div>
+      <div class="delete-confirm-btns">
+        <button class="delete-exec-btn" onclick="execClearRecords()">削除する</button>
+        <button class="delete-cancel-btn" onclick="cancelDelete()">キャンセル</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 設定ページ ===== -->
+<div class="page" id="page-setting">
+
+  <!-- バックアップ・復元 -->
+  <div class="section-card">
+    <div class="section-title">データのバックアップ・復元</div>
+    <button class="action-btn" onclick="backupData()">💾 バックアップをダウンロード</button>
+    <label class="restore-btn"
+           style="display:block;text-align:center;cursor:pointer;line-height:2">
+      📂 バックアップから復元
+      <input type="file" accept=".json" style="display:none"
+             onchange="restoreData(event)">
+    </label>
+    <div class="backup-note">
+      ※ バックアップにはポイント・学習記録・重点問題が含まれます。<br>
+      ※ 復元すると現在のデータは上書きされます。
+    </div>
+    <div id="restore-confirm-box"></div>
+  </div>
+
+  <!-- 2. 出題範囲フィルター（複数選択可） -->
+  <div class="section-card">
+    <div class="section-title">出題範囲（複数選択可）</div>
+    <div class="filter-row" id="grade-filter-row"></div>
+    <div class="selected-label" id="selected-label">選択中：すべて</div>
+  </div>
+
+  <!-- 絞り込み（jukugo-config.jsのfilterLabelsから動的生成） -->
+  <div class="section-card">
+    <div class="section-title" id="filter-title">絞り込み</div>
+    <div id="filter-rows">
+      <div class="loading" style="padding:10px 0;font-size:12px">読み込み中…</div>
+    </div>
+    <div style="text-align:right;margin-top:6px">
+      <button class="filter-btn"
+              style="flex:none;padding:6px 14px;min-width:auto"
+              onclick="resetFilters()">絞り込みをリセット</button>
+    </div>
+  </div>
+
+    <!-- 重点問題  -->
+  <div class="section-card">
+    <div class="focus-header">
+      <span class="focus-header-left">重点問題</span>
+      <div class="focus-header-right">
+        <span class="focus-header-label">出題割合</span>
+        <div class="ratio-row" id="ratio-row">
+          <button class="ratio-btn active" data-val="all"
+                  onclick="setRatio(this)">全部</button>
+          <button class="ratio-btn" data-val="half"
+                  onclick="setRatio(this)">半分</button>
+          <button class="ratio-btn" data-val="none"
+                  onclick="setRatio(this)">なし</button>
+        </div>
+      </div>
+    </div>
+    <input class="focus-input" type="text" placeholder="例：陶芸" id="focus-input"
+           onkeydown="if(event.key==='Enter')addFocusTag()">
+    <div class="focus-warn" id="focus-warn"></div>
+    <div class="focus-bottom">
+      <div class="focus-tags" id="focus-tags"></div>
+      <button class="focus-add-btn" onclick="addFocusTag()">追加</button>
+    </div>
+    <button class="focus-clear-btn" id="focus-clear-btn"
+            onclick="clearAllFocus()" disabled>重点問題をすべて削除</button>
+  </div>
+  
+
+  <!-- 問題数・ヒント -->
+  <div class="two-col">
+    <div class="section-card count">
+      <div class="section-title">問題数</div>
+      <div class="count-row">
+        <button class="count-btn active" data-val="10" onclick="setCount(this)">10問</button>
+        <button class="count-btn" data-val="20" onclick="setCount(this)">20問</button>
+        <button class="count-btn" data-val="30" onclick="setCount(this)">30問</button>
+      </div>
+    </div>
+    <div class="section-card hint">
+      <div class="section-title">ヒント</div>
+      <div class="hint-row">
+        <button class="hint-btn active" data-val="on"  onclick="setHint(this)">あり</button>
+        <button class="hint-btn"        data-val="off" onclick="setHint(this)">なし</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ポイント・称号 -->
+  <div class="section-card">
+    <div class="section-title">ポイント・称号</div>
+    <div class="point-header">
+      <div class="point-val"  id="setting-pt-val">⭐ 0 pt</div>
+      <div class="point-rank" id="setting-pt-rank">📖 見習い</div>
+    </div>
+    <button class="point-reset-btn" onclick="confirmResetPoints()">
+      ポイントをリセット
+    </button>
+  </div>
+
+</div><!-- /page-setting -->
+
+<!-- ===== JSの順番：設定ファイル → 共通機能 → 熟語クイズ用機能 → このページの本体処理 ===== -->
+<script src="./jukugo-config.js"></script>
+<script src="../../core/strage/points.js"></script>
+<script src="../../core/strage/records.js"></script>
+<script src="../../core/rank/rankImage.js"></script>
+<script src="./jukugo-okuri.js"></script>
+<script src="./jukugo-choice.js"></script>
+<script src="./questionBuilder.js"></script>
+<!-- ここから index.html の本体JS -->
+
+<script>
+
+/* ================================================
+   backup.js インライン（v2）
+   依存: points.js / records.js / APP_CONFIG
+   方針:
+   - ポイントは全アプリ共通で復元
+   - 記録・重点問題はアプリごと
+   - バックアップ全体は learning_apps_backup_archive に保管
+   ================================================ */
+
+function backupData() {
+  // 1. 現在開いているアプリの最新データを保管庫に反映
+  if (typeof saveCurrentAppDataToArchive === 'function') {
+    saveCurrentAppDataToArchive();
+  }
+
+  // 2. 保管庫全体を取得
+  const archive = typeof loadBackupArchive === 'function'
+    ? loadBackupArchive()
+    : {
+        backupType : 'learning_apps_backup',
+        version    : 2,
+        exportedAt : new Date().toISOString(),
+        shared     : {},
+        apps       : {}
+      };
+
+  // 3. 共通ポイントを必ず最新化
+  archive.backupType = 'learning_apps_backup';
+  archive.version    = 2;
+  archive.exportedAt = new Date().toISOString();
+  archive.shared     = archive.shared || {};
+  archive.apps       = archive.apps || {};
+
+  if (typeof loadPoints === 'function') {
+    archive.shared.points = loadPoints();
+  }
+
+  // 4. 現在のアプリ分を必ず入れる
+  archive.apps[APP_CONFIG.appId] = {
+    records: loadRecords(),
+    focus  : loadFocus(),
+    wrong  : (typeof loadWrongItems === 'function') ? loadWrongItems() : []
+  };
+
+  // 5. JSONとして保存
+  const now = new Date();
+  const p   = n => String(n).padStart(2, '0');
+  const ds  = `${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}`;
+
+  const blob = new Blob(
+    [JSON.stringify(archive, null, 2)],
+    { type: 'application/json' }
+  );
+
+  const url = URL.createObjectURL(blob);
+  const a   = document.createElement('a');
+
+  a.href = url;
+  a.download = `learning_apps_backup_${ds}.json`;
+  a.click();
+
+  URL.revokeObjectURL(url);
+}
+
+function restoreData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+
+  reader.onload = e => {
+    let data;
+
+    try {
+      data = JSON.parse(e.target.result);
+
+      // v2形式
+      const isV2 =
+        data.backupType === 'learning_apps_backup' &&
+        data.version >= 2 &&
+        data.apps &&
+        typeof data.apps === 'object';
+
+      // 旧v1形式も一応受け付ける
+      const isV1 =
+        data.backupType === 'learning_apps_backup' &&
+        data.version === 1;
+
+      if (!isV2 && !isV1) {
+        throw new Error('形式が異なります');
+      }
+
+    } catch {
+      showRestoreMessage(
+        '❌ 復元に失敗しました。正しいバックアップファイルか確認してください。',
+        'error'
+      );
+      event.target.value = '';
+      return;
+    }
+
+    showRestoreConfirm(data);
+    event.target.value = '';
+  };
+
+  reader.readAsText(file);
+}
+
+let _pendingRestoreData = null;
+
+function showRestoreConfirm(data) {
+  _pendingRestoreData = data;
+
+  const box = document.getElementById('restore-confirm-box');
+  if (!box) return;
+
+  box.style.display = 'block';
+  box.innerHTML = `
+    <div style="font-size:13px;color:var(--red-t);margin-bottom:8px">
+      ⚠️ バックアップを復元します。<br>
+      共通ポイントを復元し、現在のアプリの記録だけを反映します。<br>
+      他アプリの記録はバックアップ保管庫に保持されます。
+    </div>
+    <div style="display:flex;gap:8px">
+      <button onclick="doRestore()"
+        style="flex:1;padding:8px;background:var(--green);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">
+        復元する
+      </button>
+      <button onclick="cancelRestore()"
+        style="flex:1;padding:8px;background:#eee;color:#555;border:none;border-radius:8px;font-size:13px;cursor:pointer">
+        キャンセル
+      </button>
+    </div>`;
+}
+
+function doRestore() {
+  const data = _pendingRestoreData;
+  if (!data) return;
+
+  // v1バックアップをv2風に変換
+  let archive = data;
+
+  if (data.version === 1) {
+    archive = {
+      backupType : 'learning_apps_backup',
+      version    : 2,
+      exportedAt : data.exportedAt || new Date().toISOString(),
+      shared     : data.shared || {},
+      apps       : data.apps || {}
+    };
+  }
+
+  // 1. バックアップ全体を保管庫に保存
+  if (typeof storeImportedBackupArchive === 'function') {
+    storeImportedBackupArchive(archive);
+  }
+
+  // 2. 共通ポイントを復元
+  if (
+    archive.shared &&
+    typeof archive.shared.points === 'number' &&
+    typeof savePoints === 'function'
+  ) {
+    savePoints(archive.shared.points);
+  }
+
+  // 3. 現在開いているアプリの記録・重点問題だけ復元
+  if (typeof restoreCurrentAppDataFromArchive === 'function') {
+    restoreCurrentAppDataFromArchive();
+  } else {
+    const appData = archive.apps?.[APP_CONFIG.appId];
+
+    if (appData) {
+      if (Array.isArray(appData.records)) {
+        saveRecords(appData.records);
+      }
+
+      if (Array.isArray(appData.focus)) {
+        saveFocus(appData.focus);
+      }
+
+      if (Array.isArray(appData.wrong) && typeof saveWrongItems === 'function') {
+        saveWrongItems(appData.wrong);
+      }
+    }
+  }
+
+  _pendingRestoreData = null;
+
+  showRestoreMessage('✅ 復元が完了しました。', 'success');
+  onRestoreComplete();
+}
+
+function cancelRestore() {
+  _pendingRestoreData = null;
+
+  const box = document.getElementById('restore-confirm-box');
+  if (box) box.style.display = 'none';
+}
+
+function showRestoreMessage(msg, type) {
+  const box = document.getElementById('restore-confirm-box');
+  if (!box) return;
+
+  const color = type === 'success' ? 'var(--green)' : 'var(--red-t)';
+
+  box.style.display = 'block';
+  box.innerHTML = `
+    <div style="font-size:13px;color:${color};text-align:center">
+      ${msg}
+    </div>`;
+
+  setTimeout(() => {
+    box.style.display = 'none';
+  }, 3000);
+}
+
+function onRestoreComplete() {
+  totalPoints = loadPoints();
+
+  renderFocusTags();
+  renderSettingPoints();
+  renderPrintPreview();
+
+  if (typeof startSession === 'function') {
+    startSession();
+  }
+}
+
+/* ================================================
+   print.js インライン（v1）
+   依存: records.js
+   ================================================ */
+function renderPrintPreview() {
+  const area     = document.getElementById('print-area'); if (!area) return;
+  const dateFrom = document.getElementById('print-date-from')?.value || '';
+  let records    = loadRecords();
+  if (dateFrom) {
+    records = records.filter(r => {
+      const rd = r.date ? r.date.replace(/\//g, '-').slice(0, 10) : '';
+      return rd >= dateFrom;
+    });
+  }
+  if (!records.length) {
+    area.innerHTML = '<div class="print-empty">表示できる記録がありません</div>'; return;
+  }
+  area.innerHTML = records.map(r => {
+    const wordsHtml = (r.words?.length)
+      ? `<div class="print-card-label">出題された問題</div>
+         <div class="print-card-words">${r.words.join('・')}</div>` : '';
+    const wrongHtml = (r.wrong?.length)
+      ? `<div class="print-card-label">間違えた問題</div>
+         <div class="print-card-wrong">${r.wrong.map(w =>
+           `<span class="print-card-wrong-item">${w.ans}（${w.yomi}）</span>`
+         ).join('')}</div>` : '';
+    return `<div class="print-card">
+      <div class="print-card-date">${r.date || ''}</div>
+      <div class="print-card-row">
+        <div class="print-card-score">${r.pct}%</div>
+        <div class="print-card-count">${r.score} / ${r.total} 問正解</div>
+      </div>
+      ${wordsHtml}${wrongHtml}
+    </div>`;
+  }).join('');
+}
+
+function printRecords()   { renderPrintPreview(); window.print(); }
+function clearDateFilter(){ document.getElementById('print-date-from').value = ''; renderPrintPreview(); }
+
+/* ================================================
+   アプリ本体
+   ================================================ */
+
+// ---- グローバル状態 ----
+let jukugoData   = [];
+let jukugoSchema = [];   // jukugo.json の schema配列
+let filterKeys   = [];   // schemaから作る絞り込み項目
+let kanjiData    = [];   // kanji.json の data配列
+let gradeData    = [];   // gradejson.json の data配列
+let kanjiGradeMap = {};  // { 漢字: grade_code } — 起動時に1回構築
+//let okuriganaData = [];  // okurigana.json の data配列 [{word,kanji,answer,choices},...]
+
+let questions    = [];
+let qIdx         = 0;
+let sessionScore = 0;
+let sessionWrong = [];
+let sessionCount = 0;
+let checked      = false;
+
+const SETTING_KEY = `${APP_CONFIG.appId}_setting`;
+//let setting = { count: 10, hint: true, ratio: 'all', filters: {}, gradeLimit: null };
+let setting = {
+  count: 10,
+  hint: true,
+  ratio: 'all',
+  filters: {},
+  selectedGrades: [] // 空配列は「全て」を意味する
+};
+
+// ---- 起動 ----
+async function init() {
+  // 設定復元
+  try { const sv = localStorage.getItem(SETTING_KEY); if (sv) Object.assign(setting, JSON.parse(sv)); } catch {}
+  normalizeSelectedGrades();
+
+  // データ読み込み（並行 fetch）
+  try {
+      const [jukugoRes, kanjiRes, gradeRes] = await Promise.all([
+      fetch(APP_CONFIG.dataFile),
+      fetch('../../data/kanji.json'),
+      fetch('../../data/gradejson.json'),
+    ]);
+
+const jukugoJson = await jukugoRes.json();
+jukugoData   = jukugoJson.data || [];
+jukugoSchema = jukugoJson.schema || [];
+filterKeys   = jukugoSchema.slice(4);
+
+kanjiData  = (await kanjiRes.json()).data  || [];
+gradeData  = (await gradeRes.json()).data  || [];
+
+/* okurigana.json排除
+      const [jukugoRes, kanjiRes, gradeRes, okuriRes] = await Promise.all([
+      fetch(APP_CONFIG.dataFile),
+      fetch('../../data/kanji.json'),
+      fetch('../../data/gradejson.json'),
+      fetch('../../data/okurigana.json'),
+    ]);
+    jukugoData    = (await jukugoRes.json()).data || [];
+    kanjiData     = (await kanjiRes.json()).data  || [];
+    gradeData     = (await gradeRes.json()).data  || [];
+    okuriganaData = (await okuriRes.json()).data  || [];
+*/
+  } catch {
+    document.getElementById('quiz-loading').textContent =
+      'データの読み込みに失敗しました。';
+    return;
+  }
+
+  // kanjiGradeMap を構築: 同じ漢字が複数行あるので grade_order が最小のもの（最も早く習う学年）を採用
+  const gradeOrder = {};
+  for (const r of gradeData) gradeOrder[r[3]] = r[0]; // { grade_code: grade_order }
+  for (const row of kanjiData) {
+    const kanji = row[0], code = row[2];
+    if (!kanjiGradeMap[kanji] || gradeOrder[code] < gradeOrder[kanjiGradeMap[kanji]]) {
+      kanjiGradeMap[kanji] = code;
+    }
+  }
+
+  JukugoChoice.init({ kanjiData, gradeData, kanjiGradeMap });
+
+  buildGradeFilterUI();
+  buildFilterUI();
+  applySettingUI();
+  renderFocusTags();
+  renderSettingPoints();
+  startSession();
+}
+
+// ---- 出題範囲フィルターUI（複数選択）----
+function getAllGradeCodes() {
+  return gradeData.map(r => r[3]); // 'E1','E2',...,'H'
+}
+
+function normalizeSelectedGrades() {
+  if (!Array.isArray(setting.selectedGrades)) {
+    setting.selectedGrades = [];
+  }
+
+  const allCodes = ['E1','E2','E3','E4','E5','E6','J1','J2','J3','H'];
+
+  // 旧データで全学年が保存されている場合は、onyomi と同じ「空配列＝全て」に寄せる。
+  if (allCodes.every(code => setting.selectedGrades.includes(code))) {
+    setting.selectedGrades = [];
+  }
+
+  // 以前の単一選択用設定が残っていても、今回の複数選択では使わない。
+  setting.gradeLimit = null;
+}
+
+function buildGradeFilterUI() {
+  const row = document.getElementById('grade-filter-row');
+  if (!row) return;
+
+  normalizeSelectedGrades();
+  row.innerHTML = '';
+
+  const selected = new Set(setting.selectedGrades);
+  const allBtn = document.createElement('button');
+  allBtn.className = 'filter-btn' + (selected.size === 0 ? ' active' : '');
+  allBtn.textContent = '全て';
+  allBtn.onclick = () => {
+    setting.selectedGrades = [];
+    saveSetting();
+    resetAndRestartByGrade();
+  };
+  row.appendChild(allBtn);
+
+  for (const gd of gradeData) {
+    const code  = gd[3]; // 'E1','E2',...,'H'
+    const label = gd[2]; // '小1','小2',...,'高校'
+
+    const btn = document.createElement('button');
+    btn.className = 'filter-btn' + (selected.has(code) ? ' active' : '');
+    btn.dataset.grade = code;
+    btn.textContent = label;
+    btn.onclick = () => toggleGradeFilter(code);
+    row.appendChild(btn);
+  }
+
+  updateSelectedGradeLabel();
+}
+
+function toggleGradeFilter(code) {
+  normalizeSelectedGrades();
+
+  const selected = new Set(setting.selectedGrades);
+  if (selected.has(code)) {
+    selected.delete(code);
+  } else {
+    selected.add(code);
+  }
+
+  setting.selectedGrades = [...selected];
+
+  // 全学年を個別に選んだ場合は「全て」と同じ扱いにする。
+  const allCodes = getAllGradeCodes();
+  if (allCodes.length > 0 && allCodes.every(c => setting.selectedGrades.includes(c))) {
+    setting.selectedGrades = [];
+  }
+
+  saveSetting();
+  resetAndRestartByGrade();
+}
+
+function updateSelectedGradeLabel() {
+  const label = document.getElementById('selected-label');
+  if (!label) return;
+
+  const selected = new Set(setting.selectedGrades);
+  if (selected.size === 0) {
+    label.textContent = '選択中：すべて';
+    return;
+  }
+
+  const names = gradeData
+    .filter(r => selected.has(r[3]))
+    .map(r => r[2]);
+
+  label.textContent = names.length
+    ? '選択中：' + names.join('、')
+    : '選択中：なし';
+}
+
+function resetAndRestartByGrade() {
+  sessionScore = 0;
+  sessionWrong = [];
+  qIdx = 0;
+  questions = [];
+  checked = false;
+
+  buildGradeFilterUI();
+  startSession();
+}
+
+// ---- 絞り込みフィルターUI（jukugo.json の schema から動的生成）----
+function schemaIndex(key) {
+  return jukugoSchema.indexOf(key);
+}
+
+function formatFilterValue(key, value) {
+  const formatter = APP_CONFIG.filterFormatters?.[key];
+  return formatter ? formatter(value, gradeData) : String(value);
+}
+
+function sortFilterValues(key, values) {
+  const sorter = APP_CONFIG.filterSorters?.[key];
+  if (sorter) return [...values].sort((a, b) => sorter(a, b, gradeData));
+
+  return [...values].sort((a, b) => {
+    const na = Number(a);
+    const nb = Number(b);
+    if (!isNaN(na) && !isNaN(nb)) return na - nb;
+    return String(a).localeCompare(String(b), 'ja');
+  });
+}
+
+function getSavedFilterValues(key) {
+  const v = setting.filters?.[key];
+
+  if (!v) return [];
+
+  if (Array.isArray(v)) {
+    return v.map(String);
+  }
+
+  return [String(v)];
+}
+
+function buildFilterRows() {
+  const container = document.getElementById('filter-rows');
+  if (!container) return;
+
+  container.innerHTML = "";
+
+  if (!filterKeys.length) {
+    container.innerHTML =
+      '<div style="font-size:12px;color:var(--faint)">絞り込み項目はありません</div>';
+    return;
+  }
+
+  filterKeys.forEach(key => {
+    const label = APP_CONFIG.filterLabels?.[key] ?? key;
+    const row = document.createElement('div');
+    row.className = 'filter-row';
+    row.innerHTML = `
+      <label>${label}</label>
+      <select id="filter-${key}" multiple size="1">
+      </select>
+    `;
+    container.appendChild(row);
+  });
+}
+
+function rebuildSelect(key, values, selectedValues) {
+  const sel = document.getElementById(`filter-${key}`);
+  if (!sel) return;
+
+  sel.innerHTML = "";
+
+  sortFilterValues(key, values).forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = String(v);
+    opt.textContent = formatFilterValue(key, v);
+
+    if (selectedValues.includes(String(v))) {
+      opt.selected = true;
+    }
+
+    sel.appendChild(opt);
+  });
+}
+
+function updateFilterOptions() {
+  filterKeys.forEach(key => {
+    const idx = schemaIndex(key);
+    if (idx < 0) return;
+
+    const values = [
+      ...new Set(
+        jukugoData
+          .map(r => r[idx])
+          .filter(v => v !== undefined && v !== null && v !== "")
+      )
+    ];
+
+    const selectedValues = getSavedFilterValues(key);
+    rebuildSelect(key, values, selectedValues);
+  });
+}
+function buildFilterOptions() {
+  updateFilterOptions();
+
+  filterKeys.forEach(key => {
+    const sel = document.getElementById(`filter-${key}`);
+    if (!sel) return;
+
+    sel.addEventListener('change', () => {
+      const selectedValues = [...sel.selectedOptions].map(opt => opt.value);
+
+      if (!setting.filters) setting.filters = {};
+
+      if (selectedValues.length === 0) {
+        delete setting.filters[key];
+      } else {
+        setting.filters[key] = selectedValues;
+      }
+
+      saveSetting();
+      startSession();
+    });
+  });
+}
+
+function buildFilterUI() {
+  buildFilterRows();
+  buildFilterOptions();
+}
+
+function resetFilters() {
+  setting.filters = {};
+  saveSetting();
+  buildFilterUI();
+}
+
+function applyCurrentFilters(rows) {
+  return rows.filter(row => {
+    return filterKeys.every(key => {
+      const selectedValues = getSavedFilterValues(key);
+
+      if (!selectedValues.length) return true;
+
+      const idx = schemaIndex(key);
+      if (idx < 0) return true;
+
+      return selectedValues.includes(String(row[idx]));
+    });
+  });
+}
+
+// ---- 設定保存・UI反映 ----
+function saveSetting() { try { localStorage.setItem(SETTING_KEY, JSON.stringify(setting)); } catch {} }
+
+function applySettingUI() {
+  document.querySelectorAll('.count-btn').forEach(b => b.classList.toggle('active', Number(b.dataset.val) === setting.count));
+  document.querySelectorAll('.hint-btn') .forEach(b => b.classList.toggle('active', (b.dataset.val === 'on') === setting.hint));
+  document.querySelectorAll('.ratio-btn').forEach(b => b.classList.toggle('active', b.dataset.val === setting.ratio));
+}
+
+function setCount(btn) {
+  document.querySelectorAll('.count-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  setting.count = Number(btn.dataset.val);
+  saveSetting();
+
+  startSession();
+}
+
+function setHint(btn) {
+  document.querySelectorAll('.hint-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  setting.hint = btn.dataset.val === 'on';
+  saveSetting();
+
+  renderQuestion();
+}
+
+function setRatio(btn) {
+  document.querySelectorAll('.ratio-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active'); setting.ratio = btn.dataset.val; saveSetting();
+}
+
+// ---- 重点問題 ----
+function renderFocusTags() {
+  const focus = loadFocus();
+  document.getElementById('focus-tags').innerHTML = focus.map(w =>
+    `<span class="focus-tag">${w}
+       <button class="focus-tag-del" onclick="removeFocusTag('${w.replace(/'/g,"\\'")}')">×</button>
+     </span>`
+  ).join('');
+  const clearBtn = document.getElementById('focus-clear-btn');
+  if (clearBtn) clearBtn.disabled = focus.length === 0;
+}
+
+function addFocusTag() {
+  const input = document.getElementById('focus-input');
+  const warn  = document.getElementById('focus-warn');
+  const val   = input.value.trim();
+  if (!val) { warn.textContent = '熟語を入力してください'; setTimeout(() => warn.textContent = '', 2000); return; }
+  if (!jukugoData.some(r => r[0] === val)) {
+    warn.textContent = `「${val}」はデータに見つかりません`; setTimeout(() => warn.textContent = '', 3000); return;
+  }
+  const focus = loadFocus();
+  if (focus.includes(val)) {
+    warn.textContent = `「${val}」はすでに追加されています`; setTimeout(() => warn.textContent = '', 2000); return;
+  }
+  focus.push(val); saveFocus(focus);
+  input.value = ''; warn.textContent = '';
+  renderFocusTags();
+}
+
+function removeFocusTag(word) { saveFocus(loadFocus().filter(w => w !== word)); renderFocusTags(); }
+function clearAllFocus()      { clearFocus(); renderFocusTags(); }
+
+function updateQuizHeader() {
+  const totalCount = questions.length || setting.count || 10;
+
+  const sd = document.getElementById('score-disp');
+  if (sd) sd.textContent = `${qIdx + 1} / ${totalCount} 問`;
+
+  const pd = document.getElementById('point-disp');
+  if (pd) pd.textContent = `${totalPoints} pt`;
+
+  const rank = getRank(totalPoints);
+
+  const hr = document.getElementById('header-rank-disp');
+  if (hr) hr.textContent = rank.label;
+
+//  const pr = document.getElementById('point-rank-disp');
+//  if (pr) pr.textContent = rank.label;
+
+  const ss = document.getElementById('session-disp');
+  if (ss) ss.textContent = sessionCount > 0 ? `${sessionCount}回目` : '';
+}
+
+// ---- ポイント表示 ----
+function renderSettingPoints() {
+  totalPoints = loadPoints();
+  const rank = getRank(totalPoints);
+  document.getElementById('setting-pt-val') ?.textContent && (document.getElementById('setting-pt-val').textContent  = `⭐ ${totalPoints} pt`);
+  document.getElementById('setting-pt-rank')?.textContent && (document.getElementById('setting-pt-rank').textContent = rank.label);
+  document.getElementById('point-disp')     ?.textContent && (document.getElementById('point-disp').textContent      = totalPoints);
+  // null チェックを簡潔に
+  const pv = document.getElementById('setting-pt-val');   if (pv) pv.textContent  = `⭐ ${totalPoints} pt`;
+  const pr = document.getElementById('setting-pt-rank');  if (pr) pr.textContent  = rank.label;
+  const pd = document.getElementById('point-disp');       if (pd) pd.textContent  = totalPoints;
+}
+
+function confirmResetPoints() {
+  if (!window.confirm('ポイントをリセットしますか？')) return;
+  resetPoints(); totalPoints = 0; renderSettingPoints();
+}
+
+// ---- 出題プール生成 ----
+function buildPool() {
+  let pool = jukugoData.slice();
+
+  // 出題範囲フィルター（複数選択）
+  // setting.selectedGrades が空なら「全て」。選択がある場合は、その学年の漢字だけで構成される熟語を残す。
+  normalizeSelectedGrades();
+  if (Array.isArray(setting.selectedGrades) && setting.selectedGrades.length > 0) {
+    const selected = new Set(setting.selectedGrades);
+    pool = pool.filter(row =>
+      row[3].every(([k]) => {
+        const kg = kanjiGradeMap[k];
+        return kg && selected.has(kg);
+      })
+    );
+  }
+
+  // jukugo.json の schema から作った絞り込み
+  pool = applyCurrentFilters(pool);
+
+  return pool;
+}
+
+/*
+// ---- 選択肢生成 ----
+// yomiToKanjiMap / allKanjiPool は kanji.json ベースで構築する
+// （jukugo.json の600字ではなく、kanji.jsonの全約2000字が対象）
+let yomiToKanjiMap = null;
+let allKanjiPool   = null;
+
+function buildYomiMap() {
+  if (yomiToKanjiMap) return;
+  yomiToKanjiMap = {};
+  for (const row of kanjiData) {          // kanji.json: [漢字, 読み, grade_code]
+    const k  = row[0];
+    const yc = stripParens(row[1]);
+    if (!yc) continue;
+    if (!yomiToKanjiMap[yc]) yomiToKanjiMap[yc] = new Set();
+    yomiToKanjiMap[yc].add(k);
+  }
+  for (const k in yomiToKanjiMap) yomiToKanjiMap[k] = [...yomiToKanjiMap[k]];
+}
+
+function getAllKanji() {
+  if (allKanjiPool) return allKanjiPool;
+  allKanjiPool = [...new Set(kanjiData.map(r => r[0]))]; // kanji.json の全漢字（重複除去）
+  return allKanjiPool;
+}
+
+function stripParens(s) {
+  return String(s).replace(/（.*?）/g, '').replace(/\(.*?\)/g, '');
+}
+
+function generateChoices(correctKanji, yomi) {
+  buildYomiMap();
+
+  // gradeLimit が設定されている場合、選択肢候補をその学年以下に限定する
+  const gradeOrderCache = {};
+  if (gradeData.length) for (const r of gradeData) gradeOrderCache[r[3]] = r[0];
+  function isWithinGradeLimit(k) {
+    if (!setting.gradeLimit || !gradeData.length) return true;
+    const kg = kanjiGradeMap[k];
+    return kg && gradeOrderCache[kg] <= gradeOrderCache[setting.gradeLimit];
+  }
+
+  const sameYomi  = (yomiToKanjiMap[yomi] || [])
+    .filter(k => k !== correctKanji && isWithinGradeLimit(k));
+  const allOthers = getAllKanji()
+    .filter(k => k !== correctKanji && !sameYomi.includes(k) && isWithinGradeLimit(k));
+
+  const distractors = [];
+  // ① 同じ読みを持つ漢字を最大5個（gradeLimit以下）
+  distractors.push(...shuffle([...sameYomi]).slice(0, 5));
+  // ② 不足分はgradeLimit以下の他の漢字で補充
+  if (distractors.length < 5)
+    distractors.push(...shuffle([...allOthers]).slice(0, 5 - distractors.length));
+  // ③ それでも足りない場合（小4以下など）は学年制限を外して補充（6択を保証）
+  if (distractors.length < 5) {
+    const fallback = getAllKanji()
+      .filter(k => k !== correctKanji && !distractors.includes(k));
+    distractors.push(...shuffle(fallback).slice(0, 5 - distractors.length));
+  }
+
+  return shuffle([correctKanji, ...distractors.slice(0, 5)]);
+}
+*/
+
+// ---- 送り仮名選択肢生成 ----
+// okurigana.json の各エントリに choices が含まれているのでそのまま使う
+// { word, kanji, answer, choices } — choices は [正解, ...不正解] の配列
+
+// word + kanji をキーに O(1) で引けるマップ（buildQuestions 前に構築）
+/*
+let okuriMap = null;
+function buildOkuriMap() {
+  if (okuriMap) return;
+  okuriMap = {};
+  for (const entry of okuriganaData) {
+    okuriMap[`${entry.word}_${entry.kanji}`] = entry;
+  }
+}
+
+function getOkuriEntry(word, kanji) {
+  buildOkuriMap();
+  return okuriMap[`${word}_${kanji}`] || null;
+}
+*/
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+
+
+// ---- セッション開始 ----
+function startSession() {
+  const pool = buildPool();
+  if (!pool.length) {
+    document.getElementById('quiz-loading').style.display  = 'block';
+    document.getElementById('quiz-loading').textContent    = '出題できる熟語がありません。設定で絞り込みを確認してください。';
+    document.getElementById('quiz-main').style.display     = 'none';
+    return;
+  }
+  questions    = buildQuestions(pool, setting);
+  qIdx         = 0;
+  sessionScore = 0;
+  sessionWrong = [];
+  document.getElementById('quiz-loading').style.display = 'none';
+  document.getElementById('quiz-main').style.display    = 'block';
+  renderQuestion();
+}
+
+// ---- 問題描画 ----
+function renderQuestion() {
+  const q = questions[qIdx];
+  checked = false;
+
+updateQuizHeader();
+document.getElementById('progress').style.width = `${(qIdx / questions.length) * 100}%`;
+
+  const hintHtml = setting.hint
+    ? `<div class="hint-text">${escHtml(q.mean)}</div>`
+    : `<div class="hint-text"></div>`;
+
+  // スロットIDの採番:
+  //   漢字スロット i     → "k{i}"
+  //   送り仮名スロット i  → "o{i}"
+  let panelsHtml = '';
+  const multiWord = q.slots.length > 1;
+
+  q.slots.forEach((sl, i) => {
+    const labelHtml = '';
+
+    // 漢字パネル（6択）
+const kanjiChoices = JukugoChoice.generateChoices(
+  sl.kanji,
+  sl.stem,
+  setting.selectedGrades
+);
+
+    const kanjiGridHtml = kanjiChoices.map(c =>
+      `<div class="choice" data-kanji="${escHtml(c)}" data-slot="k${i}"
+            onclick="selChoice(this,'k${i}')"><span>${escHtml(c)}</span></div>`
+    ).join('');
+
+    // 送り仮名パネル（okurigana.json に choices がある場合のみ追加）
+    let okuriPanelHtml = '';
+    if (sl.hasOkuri && sl.choices) {
+      const okuriGridHtml = sl.choices.map(o =>
+        `<div class="choice choice-okuri" data-okuri="${escHtml(o)}" data-slot="o${i}"
+              onclick="selChoice(this,'o${i}')"><span>${escHtml(o)}</span></div>`
+      ).join('');
+      okuriPanelHtml = `
+        <div class="panel-label">送り仮名</div>
+        <div class="choices choices-okuri" id="choices-o${i}">${okuriGridHtml}</div>`;
+    }
+
+    panelsHtml += `<div class="panel-block" id="panel-${i}">
+      ${labelHtml}
+      <div class="choices" id="choices-k${i}">${kanjiGridHtml}</div>
+      ${okuriPanelHtml}
+    </div>`;
+  });
+
+  document.getElementById('quiz-wrap').innerHTML = `
+    <div class="q-card">
+      <div class="q-label">この熟語を漢字で書け</div>
+      <div class="reading">${escHtml(q.yomi)}</div>
+      ${hintHtml}
+    </div>
+    <div class="panels-wrap">${panelsHtml}</div>
+    <div class="result-box result-ng" id="result-ng" style="display:none">
+      <span class="result-kanji" id="kanji-ng"></span>
+      <span class="result-yomi"  id="yomi-ng"></span>
+      <span class="next-hint">タップで次へ</span>
+      <div class="next-overlay" onclick="nextQ()"></div>
+    </div>
+    <div class="result-box result-ok" id="result-ok" style="display:none">
+      <span class="result-kanji" id="kanji-ok"></span>
+      <span class="result-yomi"  id="yomi-ok"></span>
+      <span class="next-hint">タップで次へ</span>
+      <div class="next-overlay" onclick="nextQ()"></div>
+    </div>
+    <button class="submit-btn" id="submit-btn" onclick="checkAnswer()" disabled>答え合わせ</button>
+    <button class="retry-btn"  id="retry-btn"  style="display:none" onclick="retryQ()">もう一度チャレンジ</button>`;
+
+  updateSubmitState();
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function selChoice(btn, slot) {
+  if (checked) return;
+  document.querySelectorAll(`#choices-${slot} .choice`).forEach(b => {
+    b.classList.remove('sel'); b.querySelector('.mark')?.remove();
+  });
+  btn.classList.add('sel');
+  btn.insertAdjacentHTML('beforeend', '<span class="mark">✓</span>');
+  updateSubmitState();
+}
+
+function updateSubmitState() {
+  const q = questions[qIdx];
+  // 全スロット（漢字 k{i} ＋ 送り仮名 o{i}）が選択済みか確認
+  const allSelected = q.slots.every((sl, i) => {
+    const kanjiOk = !!document.querySelector(`#choices-k${i} .choice.sel`);
+    const okuriOk = !sl.hasOkuri || !!document.querySelector(`#choices-o${i} .choice.sel`);
+    return kanjiOk && okuriOk;
+  });
+  const btn = document.getElementById('submit-btn');
+  if (btn) btn.disabled = !allSelected;
+}
+
+// ---- 選択した答えを1つの語として組み立てる ----
+function buildSelectedWord(q) {
+  if (!q || !Array.isArray(q.slots)) return '';
+
+  return q.slots.map((sl, i) => {
+    const kanjiSel = document.querySelector(`#choices-k${i} .choice.sel`);
+    const okuriSel = document.querySelector(`#choices-o${i} .choice.sel`);
+
+    const selectedKanji = kanjiSel?.dataset.kanji || '';
+    const selectedOkuri = sl.hasOkuri
+      ? (okuriSel?.dataset.okuri || '')
+      : '';
+
+    return `${selectedKanji}${selectedOkuri}`;
+  }).join('');
+}
+
+
+// ---- 答え合わせ ----
+function checkAnswer() {
+  if (checked) return;
+
+  const q = questions[qIdx];
+  const wrongWord = buildSelectedWord(q);
+
+  checked = true;
+  let correct = true;
+
+  q.slots.forEach((sl, i) => {
+    // 漢字スロット
+    const kanjiSel = document.querySelector(`#choices-k${i} .choice.sel`);
+    const kanjiOk  = kanjiSel?.dataset.kanji === sl.kanji;
+
+    if (!kanjiOk) correct = false;
+
+    document.querySelectorAll(`#choices-k${i} .choice`).forEach(b => {
+      const isCorrect  = b.dataset.kanji === sl.kanji;
+      const isSelected = b.classList.contains('sel');
+
+      b.querySelector('.mark')?.remove();
+      b.classList.remove('sel', 'ok', 'ng');
+
+      if (isCorrect) {
+        b.classList.add('ok');
+        b.insertAdjacentHTML('beforeend', '<span class="mark">✓</span>');
+      } else if (isSelected) {
+        b.classList.add('ng');
+        b.insertAdjacentHTML('beforeend', '<span class="mark">✗</span>');
+      }
+    });
+
+    // 送り仮名スロット
+    if (sl.hasOkuri) {
+      const okuriSel = document.querySelector(`#choices-o${i} .choice.sel`);
+      const okuriOk  = okuriSel?.dataset.okuri === sl.okuri;
+
+      if (!okuriOk) correct = false;
+
+      document.querySelectorAll(`#choices-o${i} .choice`).forEach(b => {
+        const isCorrect  = b.dataset.okuri === sl.okuri;
+        const isSelected = b.classList.contains('sel');
+
+        b.querySelector('.mark')?.remove();
+        b.classList.remove('sel', 'ok', 'ng');
+
+        if (isCorrect) {
+          b.classList.add('ok');
+          b.insertAdjacentHTML('beforeend', '<span class="mark">✓</span>');
+        } else if (isSelected) {
+          b.classList.add('ng');
+          b.insertAdjacentHTML('beforeend', '<span class="mark">✗</span>');
+        }
+      });
+    }
+  });
+
+  document.getElementById('submit-btn').style.display = 'none';
+
+  if (correct) {
+    sessionScore++;
+
+    document.getElementById('kanji-ok').textContent = q.word;
+    document.getElementById('yomi-ok') .textContent = q.yomi;
+    document.getElementById('result-ok').style.display = 'flex';
+    document.getElementById('retry-btn').style.display = 'none';
+
+  } else {
+    sessionWrong.push({
+      ans: q.word,
+      yomi: q.yomi,
+      wrongWord: wrongWord
+    });
+
+    if (typeof addWrongItem === 'function') {
+      addWrongItem({
+        word: q.word,
+        yomi: q.yomi,
+        wrongWord: wrongWord
+      });
+    }
+
+    document.getElementById('kanji-ng').textContent = q.word;
+    document.getElementById('yomi-ng') .textContent = q.yomi;
+    document.getElementById('result-ng').style.display = 'flex';
+    document.getElementById('retry-btn').style.display = 'block';
+  }
+}
+
+function retryQ() {
+  renderQuestion();
+}
+
+
+function nextQ() {
+  qIdx++;
+  if (qIdx >= questions.length) endSession();
+  else                          renderQuestion();
+}
+
+// ---- セッション終了 ----
+async function endSession() {
+  const total = questions.length;
+  const pct   = Math.round(sessionScore / total * 100);
+
+  // 共通JSでポイント加算・称号判定
+  const pointResult = finishPointSession(sessionScore, total);
+  totalPoints = pointResult.afterTotal;
+
+  let rankUpHtml = '';
+
+  if (pointResult.isRankUp && typeof getNextRankImage === 'function') {
+    try {
+      const img = await getNextRankImage(
+        '../../assets/rank/rank_images.json',
+        '../../assets/rank/images/'
+      );
+
+      if (img) {
+        rankUpHtml = `
+          <div class="rank-up-box">
+            <div class="rank-up-title">称号アップ！</div>
+            <img class="rank-up-image" src="${img.src}" alt="称号アップ">
+            <div class="rank-up-label">${pointResult.afterRank.label}</div>
+          </div>
+        `;
+      }
+    } catch (e) {
+      console.warn(e);
+    }
+  }
+
+  addRecord({
+    date  : getNowString(),
+    pct,
+    score : sessionScore,
+    total : total,
+    words : questions.map(q => q.word),
+    wrong : sessionWrong,
+  });
+
+sessionCount++;
+
+const sd = document.getElementById('score-disp');
+if (sd) sd.textContent = `${total} / ${total} 問`;
+
+const pd = document.getElementById('point-disp');
+if (pd) pd.textContent = `${totalPoints} pt`;
+
+const rank = getRank(totalPoints);
+
+const hr = document.getElementById('header-rank-disp');
+if (hr) hr.textContent = rank.label;
+
+const pr = document.getElementById('point-rank-disp');
+if (pr) pr.textContent = rank.label;
+
+const ss = document.getElementById('session-disp');
+if (ss) ss.textContent = `${sessionCount}回目`;
+
+document.getElementById('progress').style.width = '100%';
+
+  const wrongHtml = sessionWrong.length
+    ? `<div class="wrong-list">
+         <div class="wrong-title">間違えた問題</div>
+         <div class="session-wrong-items">
+           ${sessionWrong.map(w =>
+             `<span class="session-wrong-item">${escHtml(w.ans)}（${escHtml(w.yomi)}）</span>`
+           ).join('')}
+         </div>
+       </div>`
+    : '';
+
+  const bonusText = pointResult.bonus > 0
+    ? ` (+${pointResult.bonus}ボーナス)`
+    : '';
+
+  document.getElementById('quiz-wrap').innerHTML = `
+    <div class="session-end">
+      <h2>セッション終了</h2>
+      ${rankUpHtml}
+      <div class="pct">${pct}%</div>
+      <div class="score-line">${sessionScore} / ${total} 問正解</div>
+      <div class="pt-earned">⭐ +${pointResult.earned} pt 獲得${bonusText}</div>
+      ${wrongHtml}
+      <div class="session-end-btns">
+        <button class="submit-btn" onclick="startSession()">もう一度チャレンジ</button>
+        <button class="retry-btn"
+                onclick="showPage('record',document.querySelectorAll('.tab-btn')[1])">
+          記録を見る
+        </button>
+      </div>
+    </div>`;
+
+  renderSettingPoints();
+}
+
+// ---- 記録ページ ----
+function renderRecordList() {
+  const records = loadRecords();
+  const body    = document.getElementById('rec-list-body');
+  if (!records.length) { body.innerHTML = '<div class="rec-empty">まだ記録がありません</div>'; return; }
+  body.innerHTML = records.map(r => {
+    const wordsHtml = r.words?.length
+      ? `<div class="rec-label">出題された問題</div>
+         <div class="rec-word">${r.words.join('・')}</div>` : '';
+    const wrongHtml = r.wrong?.length
+      ? `<div class="rec-label">間違えた問題</div>
+         <div class="rec-wrong">${r.wrong.map(w =>
+           `<span class="rec-wrong-item">${escHtml(w.ans||'')}（${escHtml(w.yomi||'')}）</span>`
+         ).join('')}</div>` : '';
+    return `<div class="rec-item">
+      <div class="rec-date">${r.date || ''}</div>
+      <div class="rec-row">
+        <span class="rec-pct">${r.pct}%</span>
+        <span class="rec-count">${r.score} / ${r.total} 問正解</span>
+      </div>
+      ${wordsHtml}${wrongHtml}
+    </div>`;
+  }).join('');
+}
+
+// ---- タブ切り替え ----
+function showPage(id, btn) {
+  document.querySelectorAll('.page')   .forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + id)?.classList.add('active');
+  btn?.classList.add('active');
+  if (id === 'record')  {
+    renderPrintPreview();
+    showSubTab('print', document.querySelector('#page-record .sub-tab'));
+  }
+  if (id === 'setting') { renderSettingPoints(); }
+}
+
+function showSubTab(id, btn) {
+  ['list', 'print', 'delete'].forEach(s => {
+    const el = document.getElementById('sub-' + s);
+    if (el) el.style.display = s === id ? 'block' : 'none';
+  });
+  document.querySelectorAll('.sub-tab').forEach(b => b.classList.remove('active'));
+  btn?.classList.add('active');
+  if (id === 'print') renderPrintPreview();
+}
+
+function cancelDelete() {
+  showSubTab('print', document.querySelector('#page-record .sub-tab'));
+}
+
+function execClearRecords() {
+  clearRecords();
+  renderPrintPreview();
+  showSubTab('print', document.querySelector('#page-record .sub-tab'));
+}
+
+// ---- 起動 ----
+init();
+</script>
+</body>
+</html>

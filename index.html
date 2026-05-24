@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>学習アプリ ポータル</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --green:   #1D9E75;
+  --green-l: #e8f8f2;
+  --green-d: #0a6644;
+  --blue:    #4A90D9;
+  --blue-l:  #e8f2fc;
+  --blue-d:  #1a4a9e;
+  --orange:  #E8A020;
+  --orange-l:#fff8e6;
+  --orange-b:#f5d98a;
+  --bg:      #f2f4f0;
+  --panel:   #ffffff;
+  --border:  #e4e8e4;
+  --text:    #1a1a1a;
+  --sub:     #555;
+  --muted:   #888;
+  --faint:   #aaa;
+}
+html, body {
+  min-height: 100%;
+  font-family: "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+}
+button { -webkit-tap-highlight-color: transparent; font-family: inherit; cursor: pointer; }
+a      { text-decoration: none; color: inherit; }
+
+/* ヘッダー */
+.site-header {
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 16px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+.site-logo       { font-size: 20px; font-weight: 800; color: var(--green); letter-spacing: -0.5px; }
+.site-logo span  { color: var(--text); font-weight: 400; font-size: 13px; margin-left: 6px; }
+.header-pt {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: #b07800;
+  background: var(--orange-l);
+  border: 1px solid var(--orange-b);
+  border-radius: 20px;
+  padding: 4px 12px;
+}
+
+/* レイアウト */
+.container {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 16px 12px 32px;
+}
+
+.section-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--faint);
+  letter-spacing: 1px;
+  margin-bottom: 10px;
+  margin-top: 20px;
+}
+.section-label:first-child { margin-top: 0; }
+
+/* アプリグリッド */
+.app-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+@media (max-width: 360px) { .app-grid { grid-template-columns: 1fr; } }
+
+.app-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px 14px 14px;
+  transition: box-shadow .15s, transform .1s;
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+  overflow: hidden;
+}
+.app-card:active  { transform: scale(0.97); }
+.app-card:hover   { box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+.app-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  border-radius: 16px 16px 0 0;
+}
+.app-card.green::before  { background: var(--green); }
+.app-card.blue::before   { background: var(--blue);  }
+.app-card.orange::before { background: var(--orange); }
+
+.app-icon  { font-size: 28px; margin-bottom: 10px; line-height: 1; }
+.app-name  { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.app-desc  { font-size: 12px; color: var(--muted); line-height: 1.5; flex: 1; margin-bottom: 12px; }
+.app-btn   {
+  display: block; padding: 8px 0; border: none; border-radius: 10px;
+  font-size: 13px; font-weight: 600; text-align: center; width: 100%;
+}
+.app-btn:active  { opacity: 0.8; }
+.app-btn.green   { background: var(--green);  color: #fff; }
+.app-btn.blue    { background: var(--blue);   color: #fff; }
+.app-btn.orange  { background: var(--orange); color: #fff; }
+
+.badge-soon {
+  position: absolute; top: 10px; right: 10px;
+  font-size: 10px; font-weight: 700; color: var(--faint);
+  background: #f0f0ec; border-radius: 6px; padding: 2px 7px;
+}
+
+/* ポイントカード */
+.points-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.points-icon  { font-size: 32px; }
+.points-body  { flex: 1; }
+.points-val   { font-size: 24px; font-weight: 800; color: var(--orange); line-height: 1.1; }
+.points-rank  { font-size: 13px; color: var(--sub); margin-top: 2px; }
+.points-next  { font-size: 11px; color: var(--faint); margin-top: 4px; }
+.rank-bar-wrap{ margin-top: 8px; }
+.rank-bar-bg  { height: 4px; background: #e0e0e0; border-radius: 2px; overflow: hidden; }
+.rank-bar-fill{ height: 100%; background: var(--orange); border-radius: 2px; transition: width .5s; }
+
+/* フッター */
+.site-footer {
+  text-align: center;
+  padding: 24px 0 16px;
+  font-size: 11px;
+  color: var(--faint);
+}
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="site-logo">学習アプリ<span>ポータル</span></div>
+  <div class="header-pt" id="header-pt">★ 0 pt</div>
+</header>
+
+<div class="container">
+
+  <div class="section-label">あなたの記録</div>
+  <div class="points-card">
+    <div class="points-icon">⭐</div>
+    <div class="points-body">
+      <div class="points-val"  id="pts-val">0 pt</div>
+      <div class="points-rank" id="pts-rank">📖 見習い</div>
+      <div class="points-next" id="pts-next"></div>
+      <div class="rank-bar-wrap">
+        <div class="rank-bar-bg">
+          <div class="rank-bar-fill" id="rank-bar" style="width:0%"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">アプリ</div>
+  <div class="app-grid">
+
+    <div class="app-card green">
+      <div class="app-icon">📝</div>
+      <div class="app-name">熟語クイズ</div>
+      <div class="app-desc">読みから漢字を選んで書く力を鍛える</div>
+      <a href="./apps/jukugo/index.html" class="app-btn green">スタート</a>
+    </div>
+
+    <div class="app-card blue">
+      <span class="badge-soon">準備中</span>
+      <div class="app-icon">🔤</div>
+      <div class="app-name">音読みクイズ</div>
+      <div class="app-desc">カタカナの音読みから漢字を当てる</div>
+      <a href="./apps/onyomi/onyomi_index.html" class="app-btn blue">スタート</a>
+    </div>
+
+    <div class="app-card orange">
+      <span class="badge-soon">準備中</span>
+      <div class="app-icon">🏫</div>
+      <div class="app-name">学年チェック</div>
+      <div class="app-desc">熟語が何年生で習う漢字か調べる</div>
+      <a href="./apps/checkGrade/checkGrade_index.html" class="app-btn orange">スタート</a>
+    </div>
+
+  </div>
+</div>
+
+<footer class="site-footer">© 2026 学習アプリ ポータル</footer>
+
+<script>
+const POINTS_KEY_PORTAL = 'learning_total_points';
+const LEVELS_PORTAL = [
+  {min:0,    label:'📖 見習い'},
+  {min:50,   label:'✏️ 初学者'},
+  {min:150,  label:'📚 学習者'},
+  {min:300,  label:'🌱 努力家'},
+  {min:500,  label:'🔥 読み師'},
+  {min:800,  label:'⭐ 熟練者'},
+  {min:1200, label:'🌟 漢字達人'},
+  {min:2000, label:'🎓 漢字博士'},
+  {min:3500, label:'👑 伝説の士'},
+];
+function portalLoadPoints(){try{const v=localStorage.getItem(POINTS_KEY_PORTAL);return v?parseInt(v,10):0}catch{return 0}}
+function portalGetRank(pt){let r=LEVELS_PORTAL[0];for(const lv of LEVELS_PORTAL)if(pt>=lv.min)r=lv;return r}
+function portalGetNextRank(pt){for(const lv of LEVELS_PORTAL)if(pt<lv.min)return lv;return null}
+
+function renderPortalPoints(){
+  const pt   = portalLoadPoints();
+  const rank = portalGetRank(pt);
+  const next = portalGetNextRank(pt);
+  document.getElementById('header-pt').textContent = `★ ${pt} pt`;
+  document.getElementById('pts-val')  .textContent = `${pt} pt`;
+  document.getElementById('pts-rank') .textContent = rank.label;
+  if(next){
+    const progress = Math.round(((pt - rank.min) / (next.min - rank.min)) * 100);
+    document.getElementById('pts-next').textContent    = `次の称号まで ${next.min - pt} pt`;
+    document.getElementById('rank-bar').style.width    = `${Math.min(progress,100)}%`;
+  }else{
+    document.getElementById('pts-next').textContent    = '🏆 最高称号に到達しました！';
+    document.getElementById('rank-bar').style.width    = '100%';
+  }
+}
+
+renderPortalPoints();
+window.addEventListener('focus', renderPortalPoints);
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) renderPortalPoints(); });
+</script>
+</body>
+</html>

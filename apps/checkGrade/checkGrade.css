@@ -1,0 +1,250 @@
+/*
+ * checkGrade.css  v1.0
+ * 配当学年チェック アプリ固有スタイル
+ * ※ common.css を先に読み込むこと
+ *
+ * このアプリはPC向け2カラムレイアウト（モバイル非対応）
+ */
+
+/* ============================================================
+   ベース上書き（PC向け余白）
+   ============================================================ */
+body {
+  padding: 24px;
+  font-size: 14px;
+}
+
+/* ============================================================
+   ページタイトル
+   ============================================================ */
+h1 {
+  font-size: 20px;
+  margin-bottom: 24px;
+  color: var(--blue, #2a6ebb);
+  border-left: 4px solid var(--blue, #2a6ebb);
+  padding-left: 10px;
+}
+
+h2 { font-size: 14px; margin-bottom: 8px; color: #666; }
+
+/* ============================================================
+   2カラムレイアウト
+   ============================================================ */
+.layout {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 20px;
+  max-width: 1200px;
+}
+
+/* パネル（checkGrade独自、common.cssのsection-cardとは別物） */
+.panel {
+  background: #ffffff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.panel:last-child { margin-bottom: 0; }
+
+/* ============================================================
+   学年ボタン（common.cssのgrade-btnを上書き・PC向け調整）
+   ============================================================ */
+.grade-btn {
+  padding: 6px 12px;
+  border: 2px solid #2ba97a;
+  border-radius: 20px;
+  background: white;
+  font-size: 13px;
+  color: #2ba97a;
+  flex: initial;      /* common.cssのflex:1を解除 */
+  min-width: initial;
+}
+
+.grade-btn.selected {
+  background: #2ba97a;
+  color: white;
+  border-color: #2ba97a;
+  font-weight: bold;
+}
+
+/* 一括選択ボタン */
+.bulk-btn {
+  padding: 6px 14px;
+  border: 2px solid #2ba97a;
+  border-radius: 20px;
+  background: white;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+  transition: all 0.15s;
+  color: #2ba97a;
+  height: auto;
+}
+
+.bulk-btn:hover  { opacity: 0.8; }
+.bulk-btn.active { background: #2ba97a; color: white; font-weight: bold; }
+.bulk-row        { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+
+/* ============================================================
+   絞り込みフィルター行（セレクトボックス型）
+   ============================================================ */
+.filter-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  align-items: center;
+}
+
+.filter-row label { font-size: 12px; color: #666; white-space: nowrap; }
+
+.filter-row select {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  background: white;
+}
+
+.filter-row select:focus { outline: none; border-color: #2a6ebb; }
+
+/* ============================================================
+   個別テスト入力
+   ============================================================ */
+.input-row         { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.input-row label   { font-size: 12px; color: #666; }
+
+.input-row input {
+  padding: 8px 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  width: 100%;
+}
+
+.input-row input:focus { outline: none; border-color: #2a6ebb; }
+
+/* ヒントテキスト */
+.hint { font-size: 12px; color: #666; margin-bottom: 8px; }
+
+/* 実行ボタン */
+.btn-run {
+  width: 100%;
+  padding: 10px;
+  background: #2a6ebb;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  margin-top: 6px;
+  height: auto;
+}
+
+.btn-run:hover    { background: #1a5dad; }
+.btn-run:disabled { background: #aaa; cursor: not-allowed; }
+
+/* ============================================================
+   モード切り替えタブ（個別テスト内）
+   ============================================================ */
+.tab-row {
+  display: flex;
+  gap: 0;
+  margin-bottom: 14px;
+  border-bottom: 2px solid #ddd;
+}
+
+.tab-row .tab-btn {
+  padding: 7px 16px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+  color: #666;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  transition: all 0.15s;
+  height: auto;
+  flex: initial;
+  max-width: none;
+}
+
+.tab-row .tab-btn:hover  { color: #2a6ebb; }
+.tab-row .tab-btn.active { color: #2a6ebb; border-bottom-color: #2a6ebb; font-weight: bold; }
+
+.tab-panel        { display: none; }
+.tab-panel.active { display: block; }
+
+/* ============================================================
+   個別テスト 結果表示
+   ============================================================ */
+#single-result {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 6px;
+  display: none;
+  font-size: 13px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+
+#single-result.ok  { background: #e8f5e9; color: #2e7d32; border: 1px solid #2e7d32; }
+#single-result.ng  { background: #ffebee; color: #c62828; border: 1px solid #c62828; }
+#single-result.err { background: #fff3e0; color: #e65100; border: 1px solid #e65100; }
+
+/* ============================================================
+   全件テスト サマリー
+   ============================================================ */
+.summary      { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.summary-item { padding: 5px 12px; border-radius: 20px; font-size: 13px; font-weight: bold;}
+.summary-item.total { background: #e3f2fd; color: #1565c0; }
+.summary-item.ok    { background: #e8f5e9; color: #2e7d32; }
+.summary-item.ng    { background: #ffebee; color: #c62828; }
+
+/* ============================================================
+   全件テスト テーブル
+   ============================================================ */
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+
+th {
+  background: #f0f0f0;
+  padding: 8px 10px;
+  text-align: center;
+  border-bottom: 2px solid #ddd;
+  font-weight: bold;
+  position: sticky;
+  top: 0;
+}
+
+td { padding: 7px 10px; border-bottom: 1px solid #eee; vertical-align: middle; text-align: center; }
+tr:hover td { background: #fafafa; }
+
+.badge    { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; }
+.badge.ok { background: #e8f5e9; color: #2e7d32; }
+.badge.ng { background: #ffebee; color: #c62828; }
+
+.table-wrap { max-height: 480px; overflow-y: auto; border: 1px solid #ddd; border-radius: 6px; }
+
+.detail { font-size: 12px; color: #666; }
+.left   { text-align: left; }
+
+/* ============================================================
+   ステータスバー
+   ============================================================ */
+#status {
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: #fff3e0;
+  color: #e65100;
+  border: 1px solid #e65100;
+  font-size: 13px;
+}
+
+#status.loaded { background: #e8f5e9; color: #2e7d32; border-color: #2e7d32; }

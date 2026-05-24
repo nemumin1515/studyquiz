@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="data:,">
+<title>配当学年チェック</title>
+<link rel="stylesheet" href="../../core/ui/common.css">
+<link rel="stylesheet" href="./checkGrade.css">
+</head>
+<body>
+
+<h1 id="page-title">配当学年チェック</h1>
+<div id="status">JSONファイルを読み込み中...</div>
+
+<div class="layout">
+
+  <!-- 左カラム -->
+  <div>
+
+    <!-- 学年選択 -->
+    <div class="panel">
+      <h2>配当学年を選択（複数可）</h2>
+      <p class="hint">クリックで選択・解除</p>
+      <div class="bulk-row">
+        <button class="bulk-btn" id="btn-all-grades" onclick="selectAllGrades()">全部選択</button>
+        <button class="bulk-btn" id="btn-elem" onclick="selectElem()">小学校</button>
+        <button class="bulk-btn" id="btn-jh" onclick="selectJH()">中学校</button>
+      </div>
+      <div class="grade-buttons" id="grade-buttons"></div>
+      <div class="selected-label" id="selected-label">選択中：なし</div>
+    </div>
+
+    <!-- 絞り込み（jukugo-config.jsのfilterLabelsから動的生成） -->
+    <div class="panel">
+      <h2 id="filter-title">絞り込み（全件チェック用）</h2>
+      <div id="filter-rows"></div>
+      <div style="text-align:right; margin-top:4px">
+        <button class="btn-reset" onclick="resetFilters()">絞り込みをリセット</button>
+      </div>
+    </div>
+
+    <!-- 個別テスト -->
+    <div class="panel">
+      <h2 id="single-title">個別テスト</h2>
+
+      <!-- モード切り替えタブ -->
+      <div class="tab-row">
+        <button class="tab-btn active" id="tab-jukugo" onclick="switchTab('jukugo')">
+          熟語から入力
+        </button>
+        <button class="tab-btn" id="tab-textbox" onclick="switchTab('textbox')">
+          TextBoxで入力
+        </button>
+      </div>
+
+      <!-- 熟語から入力モード（従来通り） -->
+      <div class="tab-panel active" id="panel-jukugo">
+        <div class="input-row">
+          <label id="label-word">語（漢字で入力）</label>
+          <input type="text" id="input-word" placeholder="例：注意">
+        </div>
+        <div class="input-row">
+          <label>読み（ひらがなで入力）</label>
+          <input type="text" id="input-yomi" placeholder="例：ちゅうい">
+        </div>
+        <p class="hint" style="margin-bottom:8px">
+          ※ jukugo.jsonに登録されている語はそのまま照合します。<br>
+          　 未登録の語は読みを自動推定します。
+        </p>
+        <button class="btn-run" id="btn-single" disabled onclick="runSingle()">チェックする</button>
+      </div>
+
+      <!-- TextBox入力モード（autoSplitter.js使用） -->
+      <div class="tab-panel" id="panel-textbox">
+        <div class="input-row">
+          <label>語（漢字で入力）</label>
+          <input type="text" id="tb-word" placeholder="例：厚い雲">
+        </div>
+        <div class="input-row">
+          <label>読み（ひらがなで入力）</label>
+          <input type="text" id="tb-yomi" placeholder="例：あついくも">
+        </div>
+        <p class="hint" style="margin-bottom:8px">
+          ※ jukugo.jsonに登録されていない語でもチェックできます。<br>
+          　 読みは自動で漢字ごとに分解します。
+        </p>
+        <button class="btn-run" id="btn-textbox" disabled onclick="runTextBox()">チェックする</button>
+      </div>
+
+      <div id="single-result"></div>
+    </div>
+
+  </div>
+
+  <!-- 右カラム -->
+  <div class="panel">
+    <h2 id="all-check-title">全件チェック</h2>
+    <div class="summary" id="summary" style="display:none"></div>
+    <div class="table-wrap" id="table-wrap" style="display:none">
+      <table>
+        <thead id="table-head"></thead>
+        <tbody id="result-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- 設定ファイル・エンジン読み込み -->
+<script src="../jukugo/jukugo-config.js"></script>
+<script src="../../core/grade/kanjiData.js"></script>
+<script src="../../core/grade/readingUtils.js"></script>
+<script src="../../core/grade/gradeChecker.js"></script>
+<script src="../../core/grade/autoSplitter.js"></script>
+<script>
+
+let kanjiMap       = null;
+let gradeData      = null;
+let jukugoData     = null;
+let jukugoSchema   = null;
+let filterKeys     = [];
+let selectedGrades = [];
+let resultViewMode = "all"; // all / ok / ng
+
+// ===================================================
+// データ読み込み
+// ===================================================
+async function loadJSON(path) {
+  const res = await fetch(path);
+  if (!res.ok) throw new Error(`${path} の読み込みに失敗しました`);
+  return res.json();
+}
+
+async function init() {
+  const status = document.getElementById("status");
+
+  document.title                                          = APP_CONFIG.appTitle;
+  document.getElementById("page-title").textContent      = APP_CONFIG.appTitle;
+  document.getElementById("all-check-title").textContent = `${APP_CONFIG.dataFile} 全件チェック`;
+  document.getElementById("filter-title").textContent    = `絞り込み`;
+  document.getElementById("single-title").textContent    = `個別テスト`;
+  document.getElementById("label-word").textContent      = `${APP_CONFIG.dataLabel}（漢字で入力）`;
+
+  try {
+    const [kanjiJson, gradeJson, dataJson] = await Promise.all([
+      loadJSON("../../data/kanji.json"),
+      loadJSON("../../data/gradejson.json"),
+      loadJSON("../../data/" + APP_CONFIG.dataFile)
+    ]);
+
+    kanjiMap     = buildKanjiMap(kanjiJson.data);
+    gradeData    = gradeJson.data;
+    jukugoData   = dataJson.data;
+    jukugoSchema = dataJson.schema;
+
+    filterKeys = jukugoSchema.slice(4);
+
+    status.textContent =
+      `読み込み完了 ／ kanji: ${kanjiJson.data.length}件、${APP_CONFIG.dataLabel}: ${jukugoData.length}件`;
+    status.classList.add("loaded");
+
+    buildGradeButtons();
+    buildFilterRows();
+    buildFilterOptions();
+    buildTableHead();
+
+    selectedGrades = gradeData.map(r => r[3]);
+    document.querySelectorAll(".grade-btn").forEach(b => b.classList.add("selected"));
+    updateSelectedLabel();
+    updateBulkButtons();
+    runAll();
+
+    document.getElementById("btn-single").disabled  = false;
+    document.getElementById("btn-textbox").disabled = false;
+
+  } catch(e) {
+    status.textContent = "エラー: " + e.message;
+  }
+}
+
+// ===================================================
+// タブ切り替え
+// ===================================================
+function switchTab(mode) {
+  ["jukugo", "textbox"].forEach(m => {
+    document.getElementById(`tab-${m}`).classList.toggle("active", m === mode);
+    document.getElementById(`panel-${m}`).classList.toggle("active", m === mode);
+  });
+  // 結果表示をリセット
+  const result = document.getElementById("single-result");
+  result.style.display = "none";
+  result.className = "";
+}
+
+// ===================================================
+// フィルター行をschemaから動的生成
+// ===================================================
+function buildFilterRows() {
+  const container = document.getElementById("filter-rows");
+  container.innerHTML = "";
+
+  filterKeys.forEach(key => {
+    const label = APP_CONFIG.filterLabels?.[key] ?? key;
+    const row = document.createElement("div");
+    row.className = "filter-row";
+    row.innerHTML = `
+      <label>${label}</label>
+      <select id="filter-${key}"><option value="">すべて</option></select>
+    `;
+    container.appendChild(row);
+  });
+}
+
+function buildTableHead() {
+  const thead = document.getElementById("table-head");
+  const filterLabels = filterKeys.map(k => APP_CONFIG.filterLabels?.[k] ?? k);
+  thead.innerHTML = `
+    <tr>
+      <th class="left">${APP_CONFIG.dataLabel}</th>
+      <th class="left">読み</th>
+      ${filterLabels.map(l => `<th>${l}</th>`).join("")}
+      <th>結果</th>
+      <th class="left">構成漢字</th>
+    </tr>
+  `;
+}
+
+// ===================================================
+// 学年ボタン生成
+// ===================================================
+function gradeCodeToLabel(code) {
+  const row = gradeData.find(r => r[3] === code);
+  return row ? row[1] : code;
+}
+
+function gradeCodeToOrder(code) {
+  const row = gradeData.find(r => r[3] === code);
+  return row ? row[0] : "99";
+}
+
+function buildGradeButtons() {
+  const container = document.getElementById("grade-buttons");
+  gradeData.forEach(row => {
+    const btn = document.createElement("button");
+    const code = row[3];
+    let typeClass = "hs";
+    if (code.startsWith("E")) typeClass = "elem";
+    else if (code.startsWith("J")) typeClass = "jh";
+    btn.className    = "grade-btn " + typeClass;
+    btn.textContent  = row[2];
+    btn.dataset.code = code;
+    btn.addEventListener("click", () => toggleGrade(btn, code));
+    container.appendChild(btn);
+  });
+}
+
+function toggleGrade(btn, code) {
+  if (selectedGrades.includes(code)) {
+    selectedGrades = selectedGrades.filter(g => g !== code);
+    btn.classList.remove("selected");
+  } else {
+    selectedGrades.push(code);
+    btn.classList.add("selected");
+  }
+  updateSelectedLabel();
+  updateBulkButtons();
+  runAll();
+}
+
+function selectAllGrades() {
+  const allCodes = gradeData.map(r => r[3]);
+  const isAll = allCodes.every(c => selectedGrades.includes(c));
+  if (isAll) {
+    selectedGrades = [];
+    document.querySelectorAll(".grade-btn").forEach(b => b.classList.remove("selected"));
+  } else {
+    selectedGrades = [...allCodes];
+    document.querySelectorAll(".grade-btn").forEach(b => b.classList.add("selected"));
+  }
+  updateSelectedLabel();
+  updateBulkButtons();
+  runAll();
+}
+
+function selectElem() {
+  const elemCodes = gradeData.filter(r => r[3].startsWith("E")).map(r => r[3]);
+  const allSel = elemCodes.every(c => selectedGrades.includes(c));
+  if (allSel) {
+    selectedGrades = selectedGrades.filter(c => !elemCodes.includes(c));
+    document.querySelectorAll(".grade-btn.elem").forEach(b => b.classList.remove("selected"));
+  } else {
+    elemCodes.forEach(c => { if (!selectedGrades.includes(c)) selectedGrades.push(c); });
+    document.querySelectorAll(".grade-btn.elem").forEach(b => b.classList.add("selected"));
+  }
+  updateSelectedLabel();
+  updateBulkButtons();
+  runAll();
+}
+
+function selectJH() {
+  const jhCodes = gradeData.filter(r => r[3].startsWith("J")).map(r => r[3]);
+  const allSel = jhCodes.every(c => selectedGrades.includes(c));
+  if (allSel) {
+    selectedGrades = selectedGrades.filter(c => !jhCodes.includes(c));
+    document.querySelectorAll(".grade-btn.jh").forEach(b => b.classList.remove("selected"));
+  } else {
+    jhCodes.forEach(c => { if (!selectedGrades.includes(c)) selectedGrades.push(c); });
+    document.querySelectorAll(".grade-btn.jh").forEach(b => b.classList.add("selected"));
+  }
+  updateSelectedLabel();
+  updateBulkButtons();
+  runAll();
+}
+
+function updateBulkButtons() {
+  const allCodes  = gradeData.map(r => r[3]);
+  const elemCodes = gradeData.filter(r => r[3].startsWith("E")).map(r => r[3]);
+  const jhCodes   = gradeData.filter(r => r[3].startsWith("J")).map(r => r[3]);
+  document.getElementById("btn-all-grades").className =
+    "bulk-btn" + (allCodes.every(c => selectedGrades.includes(c)) ? " active" : "");
+  document.getElementById("btn-elem").className =
+    "bulk-btn" + (elemCodes.every(c => selectedGrades.includes(c)) ? " active" : "");
+  document.getElementById("btn-jh").className =
+    "bulk-btn" + (jhCodes.every(c => selectedGrades.includes(c)) ? " active" : "");
+}
+
+function updateSelectedLabel() {
+  const label = document.getElementById("selected-label");
+  if (selectedGrades.length === 0) { label.textContent = "選択中：なし"; return; }
+  const allCodes = gradeData.map(r => r[3]);
+  if (selectedGrades.length === allCodes.length) { label.textContent = "選択中：すべて"; return; }
+  const names = selectedGrades.map(code => {
+    const row = gradeData.find(r => r[3] === code);
+    return row ? row[2] : code;
+  });
+  label.textContent = "選択中：" + names.join("、");
+}
+
+// ===================================================
+// 絞り込みオプション生成（連動セレクトボックス）
+// ===================================================
+function schemaIndex(key) {
+  return jukugoSchema.indexOf(key);
+}
+
+function formatFilterValue(key, value) {
+  const formatter = APP_CONFIG.filterFormatters?.[key];
+  return formatter ? formatter(value, gradeData) : String(value);
+}
+
+function sortFilterValues(key, values) {
+  const sorter = APP_CONFIG.filterSorters?.[key];
+  if (sorter) return [...values].sort((a, b) => sorter(a, b, gradeData));
+  return [...values].sort();
+}
+
+function rebuildSelect(key, values, currentValue) {
+  const sel = document.getElementById(`filter-${key}`);
+  if (!sel) return;
+  sel.innerHTML = "<option value=''>すべて</option>";
+  sortFilterValues(key, values).forEach(v => {
+    const opt = document.createElement("option");
+    opt.value       = String(v);
+    opt.textContent = formatFilterValue(key, v);
+    if (String(v) === currentValue) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+function updateFilterOptions() {
+  const currentValues = {};
+  filterKeys.forEach(key => {
+    const sel = document.getElementById(`filter-${key}`);
+    currentValues[key] = sel ? sel.value : "";
+  });
+
+  let filtered = jukugoData;
+  filterKeys.forEach((key, i) => {
+    const idx = schemaIndex(key);
+    const values = [...new Set(filtered.map(r => r[idx]).filter(v => v !== undefined && v !== null && v !== ""))];
+    rebuildSelect(key, values, currentValues[key]);
+    const val = currentValues[key];
+    if (val) filtered = filtered.filter(r => String(r[idx]) === val);
+  });
+}
+
+function buildFilterOptions() {
+  updateFilterOptions();
+  filterKeys.forEach((key, i) => {
+    const sel = document.getElementById(`filter-${key}`);
+    if (!sel) return;
+    sel.addEventListener("change", () => {
+      filterKeys.slice(i + 1).forEach(k => {
+        const s = document.getElementById(`filter-${k}`);
+        if (s) s.value = "";
+      });
+      updateFilterOptions();
+      runAll();
+    });
+  });
+}
+
+function resetFilters() {
+  filterKeys.forEach(key => {
+    const sel = document.getElementById(`filter-${key}`);
+    if (sel) sel.value = "";
+  });
+  updateFilterOptions();
+  runAll();
+}
+
+function getFilteredData() {
+  return jukugoData.filter(row => {
+    return filterKeys.every(key => {
+      const sel = document.getElementById(`filter-${key}`);
+      if (!sel || !sel.value) return true;
+      const idx = schemaIndex(key);
+      return String(row[idx]) === sel.value;
+    });
+  });
+}
+
+// ===================================================
+// 個別テスト（熟語から入力モード）
+// jukugo.jsonに登録済みの語はそのまま照合する。
+// 未登録の語は autoSplitter.js の buildKanjiReading() で推定する。
+// ===================================================
+function runSingle() {
+  const word   = document.getElementById("input-word").value.trim();
+  const yomi   = document.getElementById("input-yomi").value.trim();
+  const result = document.getElementById("single-result");
+
+  if (!word) { showResult(result, "err", `${APP_CONFIG.dataLabel}を入力してください。`); return; }
+  if (!yomi) { showResult(result, "err", "読みを入力してください。"); return; }
+
+  // jukugo.jsonに登録済みか確認
+  const found = jukugoData.find(row => row[JUKUGO.WORD] === word && row[JUKUGO.YOMI] === yomi);
+  let kanjiReading;
+
+  if (found) {
+    // 登録済み：kanji_readingをそのまま使用
+    kanjiReading = found[JUKUGO.KANJI_READING];
+  } else {
+    // 未登録：autoSplitter.js で読みを推定
+    kanjiReading = buildKanjiReading(word, yomi, kanjiMap);
+  }
+
+  if (!kanjiReading || kanjiReading.length === 0) {
+    showResult(result, "err", `「${word}」の漢字がkanji.jsonに見つかりませんでした。`);
+    return;
+  }
+
+  const limitGrades = selectedGrades.length > 0 ? selectedGrades : gradeData.map(r => r[3]);
+  const dummyRow    = [word, yomi, "", kanjiReading, ...new Array(filterKeys.length).fill("")];
+  const ok          = checkGrade(dummyRow, limitGrades, kanjiMap, gradeData);
+
+  showSingleResult(result, ok, word, yomi, limitGrades, kanjiReading,
+    found ? "" : "（未登録語：読みを自動推定）");
+}
+
+// ===================================================
+// 個別テスト（TextBox入力モード）
+// autoSplitter.js の buildKanjiReading() で読みを推定する。
+// ===================================================
+function runTextBox() {
+  const word   = document.getElementById("tb-word").value.trim();
+  const yomi   = document.getElementById("tb-yomi").value.trim();
+  const result = document.getElementById("single-result");
+
+  if (!word) { showResult(result, "err", "語を入力してください。"); return; }
+  if (!yomi) { showResult(result, "err", "読みを入力してください。"); return; }
+
+  const kanjiReading = buildKanjiReading(word, yomi, kanjiMap);
+
+  if (!kanjiReading || kanjiReading.length === 0) {
+    showResult(result, "err", `「${word}」の漢字がkanji.jsonに見つかりませんでした。`);
+    return;
+  }
+
+  const limitGrades = selectedGrades.length > 0 ? selectedGrades : gradeData.map(r => r[3]);
+  const dummyRow    = [word, yomi, "", kanjiReading, ...new Array(filterKeys.length).fill("")];
+  const ok          = checkGrade(dummyRow, limitGrades, kanjiMap, gradeData);
+
+  showSingleResult(result, ok, word, yomi, limitGrades, kanjiReading, "（TextBox入力）");
+}
+
+// ===================================================
+// 個別テスト結果の表示（共通）
+// ===================================================
+function showSingleResult(result, ok, word, yomi, limitGrades, kanjiReading, note) {
+  const gradeNames = limitGrades.map(code => {
+    const row = gradeData.find(r => r[3] === code);
+    return row ? row[1] : code;
+  }).join("、");
+  const kanjiList = kanjiReading.map(k => `${k[0]}（${k[1] || "?"}）`).join("、");
+  const noteText  = note ? `\n${note}` : "";
+
+  if (ok) {
+    showResult(result, "ok",
+      `✓ 出題できます\n${APP_CONFIG.dataLabel}：${word}（${yomi}）\n指定学年：${gradeNames}\n構成漢字：${kanjiList}${noteText}`);
+  } else {
+    showResult(result, "ng",
+      `✗ 出題できません\n${APP_CONFIG.dataLabel}：${word}（${yomi}）\n指定学年：${gradeNames}\n構成漢字：${kanjiList}${noteText}`);
+  }
+}
+
+function showResult(el, type, text) {
+  el.style.display = "block";
+  el.className     = type;
+  el.textContent   = text;
+}
+
+function setResultViewMode(mode) {
+  resultViewMode = mode;
+  runAll();
+}
+
+// ===================================================
+// 全件テスト
+// ===================================================
+function runAll() {
+
+  if (!kanjiMap || !gradeData || !jukugoData) return;
+
+  const limitGrades  = selectedGrades.length > 0 ? selectedGrades : gradeData.map(r => r[3]);
+  const filteredData = getFilteredData();
+  const gradeNames   = selectedGrades.length > 0
+    ? selectedGrades.map(code => {
+        const row = gradeData.find(r => r[3] === code);
+        return row ? row[1] : code;
+      }).join("、")
+    : "すべて";
+
+  let okCount = 0;
+  let ngCount = 0;
+  const tbody = document.getElementById("result-body");
+  tbody.innerHTML = "";
+
+filteredData.forEach(row => {
+  const ok = checkGrade(row, limitGrades, kanjiMap, gradeData);
+  ok ? okCount++ : ngCount++;
+
+  // 表示モードに応じて、表に出す行を絞る
+  if (resultViewMode === "ok" && !ok) return;
+  if (resultViewMode === "ng" && ok) return;
+
+  const kanjiList = (row[JUKUGO.KANJI_READING] || []).map(k => `${k[0]}（${k[1]}）`).join(" ");
+
+    const filterCells = filterKeys.map(key => {
+      const idx     = schemaIndex(key);
+      const val     = row[idx];
+      const display = (val !== undefined && val !== null && val !== "")
+        ? formatFilterValue(key, val) : "";
+      return `<td class="detail">${display}</td>`;
+    }).join("");
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="left">${row[JUKUGO.WORD]}</td>
+      <td class="left">${row[JUKUGO.YOMI]}</td>
+      ${filterCells}
+      <td><span class="badge ${ok ? "ok" : "ng"}">${ok ? "出題可" : "出題不可"}</span></td>
+      <td class="detail left">${kanjiList}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  const summary = document.getElementById("summary");
+  summary.style.display = "flex";
+summary.innerHTML = `
+  <button class="summary-item total" onclick="setResultViewMode('all')">
+    対象 ${filteredData.length}件　指定学年：${gradeNames}
+  </button>
+  <button class="summary-item ok" onclick="setResultViewMode('ok')">
+    出題可 ${okCount}件
+  </button>
+  <button class="summary-item ng" onclick="setResultViewMode('ng')">
+    出題不可 ${ngCount}件
+  </button>
+`;
+
+  document.getElementById("table-wrap").style.display = "block";
+}
+
+init();
+</script>
+</body>
+</html>
